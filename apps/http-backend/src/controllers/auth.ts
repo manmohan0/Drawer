@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken"
 import { signUpSchema, signInSchema } from "@repo/common/types"
 import { User } from "../models/authModel"
 import { JWT_SECRET } from "@repo/backend-common/config"
+import  { prismaClient } from "@repo/db/db"
 
 export const signUp = async (req: Request, res: Response) => {
 
@@ -18,11 +19,13 @@ export const signUp = async (req: Request, res: Response) => {
 
     const hashedPassword = bcryptjs.hashSync(parsedBody.password, 12);
 
-    await User.create({
-        firstName: parsedBody.firstName,
-        lastName: parsedBody.lastName,
-        email: parsedBody.email,
-        password: hashedPassword,
+    await prismaClient.user.create({
+        data: {
+            firstName: parsedBody.firstName,
+            lastName: parsedBody.lastName,
+            email: parsedBody.email,
+            password: hashedPassword,
+        }
     })
 
     res.status(201).json({ message: "User created successfully" })
@@ -32,7 +35,11 @@ export const signIn = async (req: Request, res: Response) => {
 
     const parsedBody = signInSchema.parse(req.body)
 
-    const user = await User.findOne({ email: parsedBody.email })
+    const user = await prismaClient.user.findUnique({ 
+        where: {
+            email: parsedBody.email 
+        }
+    })
     
     if (!user) {
         res.status(400).json({ message: "User does not exist" })
@@ -46,7 +53,7 @@ export const signIn = async (req: Request, res: Response) => {
         return
     }
 
-    const authToken = jwt.sign({ userId: user._id }, JWT_SECRET)
+    const authToken = jwt.sign({ userId: user.id }, JWT_SECRET)
 
     res.status(200).json({ message: "Sign-in successful", authToken })
     return
