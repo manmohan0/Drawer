@@ -1,9 +1,9 @@
-import { User } from "../models/authModel";
+import "express-serve-static-core";
 
 declare global {
-  namespace Express {
-    interface Request {
-      user?: User; // 👈 Add your custom property here
+    namespace Express {
+        interface Request {
+            userId?: string;
+        }
     }
-  }
 }

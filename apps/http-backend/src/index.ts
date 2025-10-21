@@ -1,8 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
-import { connectToMongoDB } from "./config/mongodb";
-import authRouter from "./routes/auth.route";
-import roomRouter from "./routes/room.route";
+import authRouter from "./routes/auth.route.js";
+import roomRouter from "./routes/room.route.js";
 
 dotenv.config();
 
@@ -14,6 +13,5 @@ app.use('/auth', authRouter);
 app.use('/room', roomRouter);
 
 app.listen(3001, async () => {
-  await connectToMongoDB();
   console.log("HTTP Backend is running on http://localhost:3001")
 })
