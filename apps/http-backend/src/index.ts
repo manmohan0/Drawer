@@ -8,10 +8,9 @@ dotenv.config();
 const app = express();
 
 app.use(express.json());
-
-app.use("/auth", authRouter);
-app.use("/room", roomRouter);
+app.use('/auth', authRouter);
+app.use('/room', roomRouter);
 
 app.listen(3001, async () => {
-  console.log("HTTP Backend is running on http://localhost:3001");
-});
+  console.log("HTTP Backend is running on http://localhost:3001")
+})

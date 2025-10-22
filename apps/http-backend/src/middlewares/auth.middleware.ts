@@ -11,7 +11,6 @@ export const authMiddleware = (
   next: NextFunction,
 ) => {
   const authToken = req.headers["authorization"] || "";
-
   try {
     const decodedUser = jwt.verify(
       authToken,

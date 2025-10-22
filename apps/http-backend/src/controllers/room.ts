@@ -46,3 +46,20 @@ export const getChatsByRoomId = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Failed to retrieve chats" });
   }
 };
+
+export const getChatsBySlug = async (req: Request, res: Response) => {
+  const { slug } = req.params;
+
+  try {
+    const room = await prismaClient.room.findFirst({
+      where: { slug }
+    })
+    if (!room) {
+      res.status(404).json({ message: "Room not found" });
+      return;
+    }
+    res.status(200).json({ room });
+  } catch (e) {
+    res.status(500).json({ message: "Failed to retrieve room" });
+  }
+};
