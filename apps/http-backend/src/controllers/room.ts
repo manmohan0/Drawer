@@ -26,3 +26,23 @@ export const createRoom = async (req: Request, res: Response) => {
     return;
   }
 };
+
+export const getChatsByRoomId = async (req: Request, res: Response) => {
+  const { roomId } = req.params;
+  
+  if (!roomId) {
+    res.status(400).json({ message: "Room ID is required" });
+    return;
+  }
+
+  try {
+    const chats = await prismaClient.chat.findMany({
+      where: { roomId: Number(roomId) },
+      orderBy: { createdAt: "asc" },
+    });
+
+    res.status(200).json({ chats });
+  } catch (e) {
+    res.status(500).json({ message: "Failed to retrieve chats" });
+  }
+};
