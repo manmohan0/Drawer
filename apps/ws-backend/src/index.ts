@@ -75,24 +75,52 @@ wss.on("connection", (ws, req) => {
 
     if (data.type === "chat") {
       
-      await prismaClient.chat.create({
+      // await prismaClient.chat.create({
+      //   data: {
+      //     userId: userAuthenticated.userId,
+      //     roomId: data.roomId,
+      //     message: data.message
+      //   }
+      // })
+      await prismaClient.shapes.create({
         data: {
-          userId: userAuthenticated.userId,
-          roomId: data.roomId,
-          message: data.message
+          roomId: Number(data.roomId),
+          shape: data.shape
         }
       })
 
       users.forEach(user => {
         if (user.rooms.includes(data.room)) {
           user.ws.send(JSON.stringify({ 
-            type: "chat", 
-            message: data.message, 
+            type: "shape created", 
+            shape: data.shape, 
             roomId: data.roomId, 
             from: userAuthenticated.userId
           }));
         }
       });
+    }
+
+    if (data.type == "clear") {
+      try {
+
+        await prismaClient.shapes.deleteMany({
+          where: {
+            roomId: Number(data.roomId)
+          }
+        });
+
+        users.forEach(user => {
+          if (user.rooms.includes(data.room)) {
+            user.ws.send(JSON.stringify({ 
+              type: "cleared",
+              from: userAuthenticated.userId
+            }));
+          }
+        });
+      } catch (e) {
+        console.log("Internal server error: ", e)
+      }
     }
   });
 });

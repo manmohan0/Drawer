@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "exports": {
-    "./*": "./src/*.tsx"
+    "./*": "./src/*.tsx",
+    "./InputText": "./src/components/InputText.tsx",
+    "./tailwind-config": "./tailwind.config.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",
@@ -16,10 +18,14 @@
     "@types/node": "^22.15.3",
     "@types/react": "19.1.0",
     "@types/react-dom": "19.1.1",
+    "autoprefixer": "^10.4.21",
     "eslint": "^9.34.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.16",
     "typescript": "5.9.2"
   },
   "dependencies": {
+    "@tailwindcss/postcss": "^4.1.16",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   }
