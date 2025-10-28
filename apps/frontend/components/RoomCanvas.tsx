@@ -15,8 +15,17 @@ export const RoomCanvas = ({ roomId } : { roomId: string }) => {
                 roomId
             }))
         }
+
         ws.onclose = (e) => {
             console.log(e)
+        }
+
+        return () => {
+            ws.send(JSON.stringify({
+                type: "leave_room",
+                roomId
+            }));
+            ws.close();
         }
     }, [roomId])
 
