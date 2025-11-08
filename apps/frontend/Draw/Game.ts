@@ -1,5 +1,5 @@
 import { BACKEND_URL } from "@/config";
-import { Shape, ShapeType } from "@/types";
+import { selector, Shape, ShapeType } from "@/types";
 import axios from "axios";
 
 export class Game {
@@ -12,6 +12,10 @@ export class Game {
   private startX: number = 0;
   private startY: number = 0;
   private selectedTool: ShapeType = "rect";
+  private selectedShape: Shape | null = null;
+  private shapeSelectors: selector[] = [];
+  private draggedSelector: selector | null = null;
+  private originalShape: Shape | null = null;
 
   constructor(canvas: HTMLCanvasElement, roomId: string, ws: WebSocket) {
     this.canvas = canvas;
@@ -29,16 +33,34 @@ export class Game {
     this.selectedTool = tool;
   };
 
+  getTool = () => {
+    return this.selectedTool;
+  };
+
   mouseDownHandler = (e: MouseEvent) => {
     this.isClicked = true;
     const canvasClient = this.canvas.getBoundingClientRect();
     this.startX = e.clientX - canvasClient.left;
     this.startY = e.clientY - canvasClient.top;
-    console.log("mouse down at", this.startX, this.startY);
+
+    if (this.selectedTool === "pointer") {
+      const hit = this.hitTest(this.startX, this.startY);
+      if (hit && hit.type === "selector" && this.selectedShape) {
+        this.draggedSelector = hit;
+        this.originalShape = JSON.parse(JSON.stringify(this.selectedShape));
+      } else {
+        this.draggedSelector = null;
+        this.originalShape = null;
+      }
+    }
   };
 
   mouseMoveHandler = (e: MouseEvent) => {
-    if (this.isClicked) {
+    if (
+      this.isClicked &&
+      this.selectedTool !== "pointer" &&
+      !this.selectedShape
+    ) {
       const canvasClient = this.canvas.getBoundingClientRect();
       const currentX = e.clientX - canvasClient.left;
       const currentY = e.clientY - canvasClient.top;
@@ -52,7 +74,6 @@ export class Game {
         this.ctx.moveTo(this.startX, this.startY);
         this.ctx.lineTo(currentX, currentY);
         this.ctx.stroke();
-        console.log("mouse moved to", currentX, currentY);
       } else if (this.selectedTool === "circle") {
         const radius = Math.sqrt(width * width + height * height);
         this.ctx.beginPath();
@@ -60,9 +81,57 @@ export class Game {
         this.ctx.stroke();
       }
     }
+
+    if (this.isClicked && this.selectedShape && this.draggedSelector && this.originalShape) {
+      if (this.selectedShape.type === "rect" && this.originalShape.type === "rect") {
+        const rect = this.selectedShape;
+        const originalRect = this.originalShape;
+        const selectorId = this.draggedSelector.id;
+
+        const canvasClient = this.canvas.getBoundingClientRect();
+        const mouseX = e.clientX - canvasClient.left;
+        const mouseY = e.clientY - canvasClient.top;
+
+        const deltaX = mouseX - this.startX;
+        const deltaY = mouseY - this.startY;
+
+        switch (selectorId) {
+          case 1: // top-left
+            rect.startX = originalRect.startX + deltaX;
+            rect.startY = originalRect.startY + deltaY;
+            rect.width = originalRect.width - deltaX;
+            rect.height = originalRect.height - deltaY;
+            break;
+          case 2: // top-right
+            rect.startY = originalRect.startY + deltaY;
+            rect.width = originalRect.width + deltaX;
+            rect.height = originalRect.height - deltaY;
+            break;
+          case 3: // bottom-right
+            rect.width = originalRect.width + deltaX;
+            rect.height = originalRect.height + deltaY;
+            break;
+          case 4: // bottom-left
+            rect.startX = originalRect.startX + deltaX;
+            rect.width = originalRect.width - deltaX;
+            rect.height = originalRect.height + deltaY;
+            break;
+        }
+
+        this.updateRectSelectors(rect);
+        this.clearCanvas();
+      }
+    }
   };
 
   mouseUpHandler = (e: MouseEvent) => {
+    if (this.draggedSelector) {
+      this.isClicked = false;
+      this.draggedSelector = null;
+      this.originalShape = null;
+      
+      return;
+    }
     this.isClicked = false;
     const width = e.clientX - this.startX;
     const height = e.clientY - this.startY;
@@ -71,8 +140,8 @@ export class Game {
     const currentY = e.clientY - canvasClient.top;
     let shape: Shape;
     if (this.selectedTool === "line") {
-        console.log("Creating line shape at", this.startX, this.startY, currentX, currentY);
       shape = {
+        id: this.existingShapes.length + 1,
         startX: this.startX,
         startY: this.startY,
         endX: currentX,
@@ -81,6 +150,7 @@ export class Game {
       };
     } else if (this.selectedTool === "rect") {
       shape = {
+        id: this.existingShapes.length + 1,
         type: this.selectedTool,
         startX: this.startX,
         startY: this.startY,
@@ -89,6 +159,7 @@ export class Game {
       };
     } else if (this.selectedTool === "circle") {
       shape = {
+        id: this.existingShapes.length + 1,
         type: this.selectedTool,
         centerX: this.startX,
         centerY: this.startY,
@@ -107,12 +178,170 @@ export class Game {
     );
   };
 
+  mouseClickHandler = (e: MouseEvent) => {
+    if (this.selectedTool === "pointer") {
+      const canvasClient = this.canvas.getBoundingClientRect();
+      const x = e.clientX - canvasClient.left;
+      const y = e.clientY - canvasClient.top;
+      const hitResult = this.hitTest(x, y);
+
+      if (!hitResult) {
+        // Clicked on empty space
+        this.selectedShape = null;
+        this.shapeSelectors = [];
+      } else if (hitResult.type === 'selector') {
+        // Clicked on a selector, do nothing to selection
+      } else {
+        // Clicked on a shape
+        this.selectedShape = hitResult;
+        if (hitResult.type === 'rect') {
+          this.updateRectSelectors(hitResult);
+        } else if (hitResult.type === 'circle') {
+          const radius = 6;
+          this.shapeSelectors = [];
+          this.shapeSelectors.push({
+            id: 1,
+            centerX: hitResult.centerX,
+            centerY: hitResult.centerY,
+            radius,
+            type: "selector",
+          });
+        } else if (hitResult.type === 'line') {
+          const radius = 6;
+          this.shapeSelectors = [];
+          this.shapeSelectors.push({
+            id: 1,
+            centerX: hitResult.startX,
+            centerY: hitResult.startY,
+            radius,
+            type: "selector",
+          });
+          this.shapeSelectors.push({
+            id: 2,
+            centerX: hitResult.endX,
+            centerY: hitResult.endY,
+            radius,
+            type: "selector",
+          });
+        }
+      }
+      this.clearCanvas();
+    }
+  };
+
+  updateRectSelectors = (shape: Shape) => {
+    if (shape.type !== "rect") return;
+    const radius = 6;
+    this.shapeSelectors = [];
+    this.shapeSelectors.push({
+      id: 1,
+      centerX: shape.startX,
+      centerY: shape.startY,
+      radius,
+      type: "selector",
+    });
+    this.shapeSelectors.push({
+      id: 2,
+      centerX: shape.startX + shape.width,
+      centerY: shape.startY,
+      radius,
+      type: "selector",
+    });
+    this.shapeSelectors.push({
+      id: 3,
+      centerX: shape.startX + shape.width,
+      centerY: shape.startY + shape.height,
+      radius,
+      type: "selector",
+    });
+    this.shapeSelectors.push({
+      id: 4,
+      centerX: shape.startX,
+      centerY: shape.startY + shape.height,
+      radius,
+      type: "selector",
+    });
+  };
+
+  hitTest = (x: number, y: number) => {
+    for (let i = 0; i < this.shapeSelectors.length; i++) {
+      const selectorId = i + 1;
+      const selector = this.shapeSelectors[selectorId - 1];
+      const dist = Math.sqrt(
+        (x - selector.centerX) ** 2 + (y - selector.centerY) ** 2
+      );
+      if (dist <= selector.radius) {
+        return selector;
+      }
+    }
+    for (let i = this.existingShapes.length - 1; i >= 0; i--) {
+      const shape = this.existingShapes[i];
+      if (shape.type === "rect") {
+        if (
+          x >= shape.startX &&
+          x <= shape.startX + shape.width &&
+          y >= shape.startY &&
+          y <= shape.startY + shape.height
+        ) {
+          return shape;
+        }
+      } else if (shape.type === "circle") {
+        const dist = Math.sqrt(
+          (x - shape.centerX) ** 2 + (y - shape.centerY) ** 2
+        );
+        if (dist <= shape.radius) {
+          return shape;
+        }
+      } else if (shape.type === "line") {
+        const x1 = shape.startX;
+        const y1 = shape.startY;
+        const x2 = shape.endX;
+        const y2 = shape.endY;
+
+        const A = x - x1;
+        const B = y - y1;
+        const C = x2 - x1;
+        const D = y2 - y1;
+
+        const dot = A * C + B * D;
+        const len_sq = C * C + D * D;
+        let param = -1;
+        if (len_sq != 0) {
+          param = dot / len_sq;
+        }
+
+        let xx, yy;
+
+        if (param < 0) {
+          xx = x1;
+          yy = y1;
+        } else if (param > 1) {
+          xx = x2;
+          yy = y2;
+        } else {
+          xx = x1 + param * C;
+          yy = y1 + param * D;
+        }
+
+
+        const dx = x - xx;
+        const dy = y - yy;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < 5) {
+          // 5 is the tolerance
+          return shape;
+        }
+      }
+    }
+    return null;
+  };
+
   initHandlers = () => {
     this.ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
       if (data.type == "shape created") {
         this.existingShapes.push(JSON.parse(data.shape));
-        // console.log(shapes)
         this.clearCanvas();
       }
 
@@ -127,20 +356,6 @@ export class Game {
     if (!this.ctx) return;
 
     this.existingShapes = await this.getExistingShapes(this.roomId);
-
-    // this.ws.onmessage = (e) => {
-    //   const data = JSON.parse(e.data);
-    //   if (data.type == "shape created") {
-    //     this.existingShapes.push(JSON.parse(data.shape));
-    //     console.log(this.existingShapes);
-    //     this.clearCanvas();
-    //   }
-
-    //   if (data.type == "cleared") {
-    //     this.existingShapes = [];
-    //     this.clearCanvas();
-    //   }
-    // };
 
     // Set initial canvas size
     this.canvas.width = window.innerWidth;
@@ -162,6 +377,8 @@ export class Game {
     this.canvas.addEventListener("mousemove", this.mouseMoveHandler);
 
     this.canvas.addEventListener("mouseup", this.mouseUpHandler);
+
+    this.canvas.addEventListener("click", this.mouseClickHandler);
   };
 
   getExistingShapes = async (canvasId: string) => {
@@ -189,36 +406,76 @@ export class Game {
   clearCanvas = () => {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    this.existingShapes.forEach((shape) => {
-      if (shape.type === "rect") {
-        this.ctx.strokeRect(
-          shape.startX,
-          shape.startY,
-          shape.width,
-          shape.height
-        );
-      } else if (shape.type === "line") {
-        this.ctx.beginPath();
-        this.ctx.moveTo(shape.startX, shape.startY);
-        this.ctx.lineTo(shape.endX, shape.endY);
-        this.ctx.stroke();
-      } else if (shape.type === "circle") {
-        this.ctx.beginPath();
-        this.ctx.arc(
-          shape.centerX,
-          shape.centerY,
-          shape.radius,
-          0,
-          2 * Math.PI
-        );
-        this.ctx.stroke();
+    if (this.existingShapes.length > 0) {
+      this.existingShapes.forEach((shape) => {
+        if (shape.type === "rect") {
+          this.ctx.strokeRect(
+            shape.startX,
+            shape.startY,
+            shape.width,
+            shape.height
+          );
+        } else if (shape.type === "line") {
+          this.ctx.beginPath();
+          this.ctx.moveTo(shape.startX, shape.startY);
+          this.ctx.lineTo(shape.endX, shape.endY);
+          this.ctx.stroke();
+        } else if (shape.type === "circle") {
+          this.ctx.beginPath();
+          this.ctx.arc(
+            shape.centerX,
+            shape.centerY,
+            shape.radius,
+            0,
+            2 * Math.PI
+          );
+          this.ctx.stroke();
+        }
+      });
+
+      if (this.shapeSelectors.length > 0 && this.selectedShape) {
+        this.shapeSelectors.forEach((selector) => {
+          // const radius = 8
+          if (this.selectedShape?.type === "circle") {
+            this.ctx.beginPath();
+            this.ctx.arc(
+              selector.centerX,
+              selector.centerY,
+              selector.radius,
+              0,
+              2 * Math.PI
+            );
+            this.ctx.stroke();
+          } else if (this.selectedShape?.type === "rect") {
+            this.ctx.beginPath();
+            this.ctx.arc(
+              selector.centerX,
+              selector.centerY,
+              selector.radius,
+              0,
+              2 * Math.PI
+            );
+            this.ctx.stroke();
+          } else if (this.selectedShape?.type === "line") {
+            this.ctx.beginPath();
+            this.ctx.arc(
+              selector.centerX,
+              selector.centerY,
+              selector.radius,
+              0,
+              2 * Math.PI
+            );
+            this.ctx.stroke();
+          }
+        });
       }
-    });
+    }
   };
 
   destroy = () => {
     this.canvas.removeEventListener("mousedown", this.mouseDownHandler);
     this.canvas.removeEventListener("mousemove", this.mouseMoveHandler);
     this.canvas.removeEventListener("mouseup", this.mouseUpHandler);
+    this.canvas.removeEventListener("click", this.mouseClickHandler);
   };
 }
