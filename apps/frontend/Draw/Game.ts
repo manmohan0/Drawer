@@ -127,6 +127,20 @@ export class Game {
   mouseUpHandler = (e: MouseEvent) => {
     if (this.draggedSelector) {
       this.isClicked = false;
+
+      let shapeId: number = -1;
+      if (this.selectedShape?.type === 'rect' && this.selectedShape.id) {
+        shapeId = this.selectedShape.id;
+      }
+      this.ws.send(
+        JSON.stringify({
+          type: "update_shape",
+          room: this.roomId,
+          shapeId: shapeId,
+          shape: JSON.stringify(this.selectedShape),
+        })
+      )
+
       this.draggedSelector = null;
       this.originalShape = null;
       
@@ -342,9 +356,17 @@ export class Game {
           id: data.shape.id,
           ...JSON.parse(data.shape.shape),
         }
-        console.log("Shape received:", shape);
         this.existingShapes.push(shape);
         this.clearCanvas();
+      }
+
+      if (data.type === "shape_updated") {
+        const shape = this.existingShapes.find(s => s.type != 'pointer' && s.id === data.shape.id);
+        if (shape) {
+          const updatedShape = JSON.parse(data.shape.shape);
+          Object.assign(shape, updatedShape);
+          this.clearCanvas();
+        }
       }
 
       if (data.type == "cleared") {
@@ -358,7 +380,6 @@ export class Game {
     if (!this.ctx) return;
 
     this.existingShapes = await this.getExistingShapes(this.roomId);
-    console.log("Existing shapes:", await this.getExistingShapes(this.roomId));
     // Set initial canvas size
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;

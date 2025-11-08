@@ -82,8 +82,6 @@ export const getExistingShapesById = async (req: Request, res: Response) => {
       return curShape;
     });
 
-    console.log(correctShapes);
-
     return res.status(200).json({
       message: shapes.length > 0 ? "Shapes found" : "No shaped found",
       shapes: correctShapes
