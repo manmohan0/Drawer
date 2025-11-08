@@ -74,15 +74,8 @@ wss.on("connection", (ws, req) => {
     }
 
     if (data.type === "chat") {
-      
-      // await prismaClient.chat.create({
-      //   data: {
-      //     userId: userAuthenticated.userId,
-      //     roomId: data.roomId,
-      //     message: data.message
-      //   }
-      // })
-      await prismaClient.shapes.create({
+
+      const shape = await prismaClient.shapes.create({
         data: {
           roomId: Number(data.roomId),
           shape: data.shape
@@ -93,7 +86,7 @@ wss.on("connection", (ws, req) => {
         if (user.rooms.includes(data.room)) {
           user.ws.send(JSON.stringify({ 
             type: "shape created", 
-            shape: data.shape, 
+            shape: shape, 
             roomId: data.roomId, 
             from: userAuthenticated.userId
           }));

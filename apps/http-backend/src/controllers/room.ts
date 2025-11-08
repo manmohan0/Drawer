@@ -40,7 +40,6 @@ export const getChatsByRoomId = async (req: Request, res: Response) => {
       where: { roomId: Number(roomId) },
       orderBy: { createdAt: "asc" },
     });
-
     res.status(200).json({ chats });
   } catch (e) {
     res.status(500).json({ message: "Failed to retrieve chats" });
@@ -69,16 +68,25 @@ export const getExistingShapesById = async (req: Request, res: Response) => {
 
   const RoomId = Number(roomId);
   try {
-    console.log(RoomId)
     const shapes = await prismaClient.shapes.findMany({
       where: {
         roomId: RoomId
       }
     })
-    
+
+    const correctShapes = shapes.map(shape => {
+      const curShape = {
+        id: shape.id,
+        ...JSON.parse(shape.shape)
+      }
+      return curShape;
+    });
+
+    console.log(correctShapes);
+
     return res.status(200).json({
       message: shapes.length > 0 ? "Shapes found" : "No shaped found",
-      shapes
+      shapes: correctShapes
     })
   } catch (e) {
     res.json({

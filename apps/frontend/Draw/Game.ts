@@ -141,7 +141,6 @@ export class Game {
     let shape: Shape;
     if (this.selectedTool === "line") {
       shape = {
-        id: this.existingShapes.length + 1,
         startX: this.startX,
         startY: this.startY,
         endX: currentX,
@@ -150,7 +149,6 @@ export class Game {
       };
     } else if (this.selectedTool === "rect") {
       shape = {
-        id: this.existingShapes.length + 1,
         type: this.selectedTool,
         startX: this.startX,
         startY: this.startY,
@@ -159,7 +157,6 @@ export class Game {
       };
     } else if (this.selectedTool === "circle") {
       shape = {
-        id: this.existingShapes.length + 1,
         type: this.selectedTool,
         centerX: this.startX,
         centerY: this.startY,
@@ -341,7 +338,12 @@ export class Game {
     this.ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
       if (data.type == "shape created") {
-        this.existingShapes.push(JSON.parse(data.shape));
+        const shape = {
+          id: data.shape.id,
+          ...JSON.parse(data.shape.shape),
+        }
+        console.log("Shape received:", shape);
+        this.existingShapes.push(shape);
         this.clearCanvas();
       }
 
@@ -356,7 +358,7 @@ export class Game {
     if (!this.ctx) return;
 
     this.existingShapes = await this.getExistingShapes(this.roomId);
-
+    console.log("Existing shapes:", await this.getExistingShapes(this.roomId));
     // Set initial canvas size
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
@@ -390,14 +392,7 @@ export class Game {
         },
       });
       const data = res.data.shapes;
-
-      if (data) {
-        const shapes = data.map((ele: { shape: string }) => {
-          const shapeData = JSON.parse(ele.shape);
-          return shapeData;
-        });
-        return shapes;
-      }
+      return data;
     } catch (e) {
       console.log(e);
     }
