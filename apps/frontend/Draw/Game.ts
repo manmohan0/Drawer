@@ -354,7 +354,7 @@ export class Game {
       if (data.type == "shape created") {
         const shape = {
           id: data.shape.id,
-          ...JSON.parse(data.shape.shape),
+          ...data.shape.shape,
         }
         this.existingShapes.push(shape);
         this.clearCanvas();

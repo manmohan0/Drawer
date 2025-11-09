@@ -81,13 +81,17 @@ wss.on("connection", (ws, req) => {
         },
       });
 
+      const newShape = {
+        id: shape.id,
+        shape: JSON.parse(data.shape),
+      }
+
       users.forEach((user) => {
-        console.log(user.ws, user.userId, user.rooms)
-        if (user.rooms.includes(data.room)) {
+        if (user.rooms.includes(data.roomId)) {
           user.ws.send(
             JSON.stringify({
               type: "shape created",
-              shape: shape,
+              shape: newShape,
               roomId: data.roomId,
               from: userAuthenticated.userId,
             })
@@ -105,7 +109,7 @@ wss.on("connection", (ws, req) => {
         });
 
         users.forEach((user) => {
-          if (user.rooms.includes(data.room)) {
+          if (user.rooms.includes(data.roomId)) {
             user.ws.send(
               JSON.stringify({
                 type: "cleared",
@@ -128,9 +132,7 @@ wss.on("connection", (ws, req) => {
       });
       
       users.forEach((user) => {
-        console.log(user.ws, user.userId, user.rooms)
         if (user.rooms.includes(data.room)) {
-          console.log("Broadcasting updated shape to user:", user.userId);
           user.ws.send(
             JSON.stringify({
               type: "shape_updated",
