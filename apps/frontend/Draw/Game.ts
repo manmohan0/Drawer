@@ -11,6 +11,9 @@ export class Game {
   private isClicked: boolean;
   private startX: number = 0;
   private startY: number = 0;
+  private panX: number = 0;
+  private panY: number = 0;
+  private isPan: boolean = false;
   private selectedTool: ShapeType = "rect";
   private selectedShape: Shape | null = null;
   private shapeSelectors: selector[] = [];
@@ -27,6 +30,7 @@ export class Game {
     this.init();
     this.initHandlers();
     this.initMouseHandlers();
+    this.initKeyboardHandlers();
   }
 
   setTool = (tool: ShapeType) => {
@@ -44,7 +48,9 @@ export class Game {
     this.startY = e.clientY - canvasClient.top;
 
     if (this.selectedTool === "pointer") {
-      const hit = this.hitTest(this.startX, this.startY);
+      const worldX = this.startX - this.panX;
+      const worldY = this.startY - this.panY;
+      const hit = this.hitTest(worldX, worldY);
       this.originalShape = JSON.parse(JSON.stringify(this.selectedShape));
       if (hit && hit.type === "selector" && this.selectedShape) {
         this.draggedSelector = hit;
@@ -58,31 +64,45 @@ export class Game {
     if (
       this.isClicked &&
       this.selectedTool !== "pointer" &&
-      !this.selectedShape
+      !this.selectedShape &&
+      !this.isPan
     ) {
       const canvasClient = this.canvas.getBoundingClientRect();
       const currentX = e.clientX - canvasClient.left;
       const currentY = e.clientY - canvasClient.top;
-      const width = currentX - this.startX;
-      const height = currentY - this.startY;
-      this.clearCanvas();
+
+      const worldStartX = this.startX - this.panX;
+      const worldStartY = this.startY - this.panY;
+      const worldCurrentX = currentX - this.panX;
+      const worldCurrentY = currentY - this.panY;
+
+      const width = worldCurrentX - worldStartX;
+      const height = worldCurrentY - worldStartY;
+
+      this.clearCanvas(); // Clears and redraws existing shapes with pan. Context is restored.
+
+      // Draw the preview on top, applying the pan transformation again.
+      this.ctx.save();
+      this.ctx.translate(this.panX, this.panY);
+
       if (this.selectedTool === "rect") {
-        this.ctx.strokeRect(this.startX, this.startY, width, height);
+        this.ctx.strokeRect(worldStartX, worldStartY, width, height);
       } else if (this.selectedTool === "line") {
         this.ctx.beginPath();
-        this.ctx.moveTo(this.startX, this.startY);
-        this.ctx.lineTo(currentX, currentY);
+        this.ctx.moveTo(worldStartX, worldStartY);
+        this.ctx.lineTo(worldCurrentX, worldCurrentY);
         this.ctx.stroke();
       } else if (this.selectedTool === "circle") {
         const radius = Math.sqrt(width * width + height * height);
         this.ctx.beginPath();
-        this.ctx.arc(this.startX, this.startY, radius, 0, 2 * Math.PI);
+        this.ctx.arc(worldStartX, worldStartY, radius, 0, 2 * Math.PI);
         this.ctx.stroke();
       }
+      
+      this.ctx.restore();
     }
 
-    console.log(this.isClicked, this.selectedShape, this.originalShape)
-    if (this.isClicked && this.selectedShape && this.originalShape) {
+    if (this.isClicked && this.selectedShape && this.originalShape && !this.isPan) {
       const canvasClient = this.canvas.getBoundingClientRect();
       const mouseX = e.clientX - canvasClient.left;
       const mouseY = e.clientY - canvasClient.top;
@@ -186,9 +206,21 @@ export class Game {
       }
       this.clearCanvas();
     }
+
+    if (this.isClicked && this.isPan) {
+      e.preventDefault();
+      this.panX += e.movementX;
+      this.panY += e.movementY;
+      this.clearCanvas();
+    }
   };
 
   mouseUpHandler = (e: MouseEvent) => {
+    if (this.isPan) {
+      this.isClicked = false;
+      return;  
+    }
+
     if (this.draggedSelector) {
       this.isClicked = false;
 
@@ -214,33 +246,40 @@ export class Game {
       return;
     }
     this.isClicked = false;
-    const width = e.clientX - this.startX;
-    const height = e.clientY - this.startY;
     const canvasClient = this.canvas.getBoundingClientRect();
     const currentX = e.clientX - canvasClient.left;
     const currentY = e.clientY - canvasClient.top;
+
+    const worldStartX = this.startX - this.panX;
+    const worldStartY = this.startY - this.panY;
+    const worldCurrentX = currentX - this.panX;
+    const worldCurrentY = currentY - this.panY;
+
+    const width = worldCurrentX - worldStartX;
+    const height = worldCurrentY - worldStartY;
+
     let shape: Shape;
     if (this.selectedTool === "line") {
       shape = {
-        startX: this.startX,
-        startY: this.startY,
-        endX: currentX,
-        endY: currentY,
+        startX: worldStartX,
+        startY: worldStartY,
+        endX: worldCurrentX,
+        endY: worldCurrentY,
         type: this.selectedTool,
       };
     } else if (this.selectedTool === "rect") {
       shape = {
         type: this.selectedTool,
-        startX: this.startX,
-        startY: this.startY,
+        startX: worldStartX,
+        startY: worldStartY,
         width: width,
         height: height,
       };
     } else if (this.selectedTool === "circle") {
       shape = {
         type: this.selectedTool,
-        centerX: this.startX,
-        centerY: this.startY,
+        centerX: worldStartX,
+        centerY: worldStartY,
         radius: Math.sqrt(width * width + height * height),
       };
     } else {
@@ -259,8 +298,8 @@ export class Game {
   mouseClickHandler = (e: MouseEvent) => {
     if (this.selectedTool === "pointer") {
       const canvasClient = this.canvas.getBoundingClientRect();
-      const x = e.clientX - canvasClient.left;
-      const y = e.clientY - canvasClient.top;
+      const x = e.clientX - canvasClient.left - this.panX;
+      const y = e.clientY - canvasClient.top - this.panY;
       const hitResult = this.hitTest(x, y);
 
       if (!hitResult) {
@@ -306,6 +345,18 @@ export class Game {
       this.clearCanvas();
     }
   };
+
+  keyboardDownHandler = (e: KeyboardEvent) => {
+    if (e.key === ' ') {
+      this.isPan = true;
+    }
+  }
+
+  keyboardUpHandler = (e: KeyboardEvent) => {
+    if (e.key === ' ') {
+      this.isPan = false;
+    }
+  }
 
   updateSelectors = (shape: Shape) => {
     if (shape.type === "rect") {
@@ -500,6 +551,12 @@ export class Game {
     this.canvas.addEventListener("click", this.mouseClickHandler);
   };
 
+  initKeyboardHandlers = () => {
+    window.addEventListener("keydown", this.keyboardDownHandler);
+
+    window.addEventListener("keyup", this.keyboardUpHandler);
+  };
+
   getExistingShapes = async (canvasId: string) => {
     try {
       const res = await axios.get(`${BACKEND_URL}/room/shapes/${canvasId}`, {
@@ -516,7 +573,9 @@ export class Game {
   };
 
   clearCanvas = () => {
+    this.ctx.save();
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.translate(this.panX, this.panY);
 
     if (this.existingShapes.length > 0) {
       this.existingShapes.forEach((shape) => {
@@ -582,6 +641,7 @@ export class Game {
         });
       }
     }
+    this.ctx.restore();
   };
 
   destroy = () => {
@@ -589,5 +649,7 @@ export class Game {
     this.canvas.removeEventListener("mousemove", this.mouseMoveHandler);
     this.canvas.removeEventListener("mouseup", this.mouseUpHandler);
     this.canvas.removeEventListener("click", this.mouseClickHandler);
+    this.canvas.removeEventListener("keydown", this.keyboardDownHandler);
+    this.canvas.removeEventListener("keyup", this.keyboardUpHandler);
   };
 }

@@ -35,7 +35,5 @@ export const RoomCanvas = ({ roomId } : { roomId: string }) => {
         </div>
     }
 
-    return <div>
-        <Canvas roomId={roomId} ws={WS} />
-    </div> 
+    return <Canvas roomId={roomId} ws={WS} />
 }
