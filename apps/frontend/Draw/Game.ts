@@ -83,17 +83,17 @@ export class Game {
     }
 
     if (this.isClicked && this.selectedShape && this.draggedSelector && this.originalShape) {
+      const canvasClient = this.canvas.getBoundingClientRect();
+      const mouseX = e.clientX - canvasClient.left;
+      const mouseY = e.clientY - canvasClient.top;
+
+      const deltaX = mouseX - this.startX;
+      const deltaY = mouseY - this.startY;
+
       if (this.selectedShape.type === "rect" && this.originalShape.type === "rect") {
-        const rect = this.selectedShape;
         const originalRect = this.originalShape;
+        const rect = this.selectedShape;
         const selectorId = this.draggedSelector.id;
-
-        const canvasClient = this.canvas.getBoundingClientRect();
-        const mouseX = e.clientX - canvasClient.left;
-        const mouseY = e.clientY - canvasClient.top;
-
-        const deltaX = mouseX - this.startX;
-        const deltaY = mouseY - this.startY;
 
         switch (selectorId) {
           case 1: // top-left
@@ -118,7 +118,33 @@ export class Game {
             break;
         }
 
-        this.updateRectSelectors(rect);
+        this.updateSelectors(rect);
+        this.clearCanvas();
+      } else if (this.selectedShape.type === "circle" && this.originalShape.type === "circle") {
+        const circle = this.selectedShape;
+        const originalCircle = this.originalShape;
+
+        circle.radius = Math.sqrt((originalCircle.radius + deltaX) ** 2 + (originalCircle.radius + deltaY) ** 2);
+        
+        this.updateSelectors(circle);
+        this.clearCanvas();
+      } else if (this.selectedShape.type === "line" && this.originalShape.type === "line") {
+        const line = this.selectedShape;
+        const originalLine = this.originalShape;
+        const selectorId = this.draggedSelector.id;
+
+        switch (selectorId) {
+          case 1: // start point
+            line.startX = originalLine.startX + deltaX;
+            line.startY = originalLine.startY + deltaY;
+            break;
+          case 2: // end point
+            line.endX = originalLine.endX + deltaX;
+            line.endY = originalLine.endY + deltaY;
+            break;
+        }
+
+        this.updateSelectors(line);
         this.clearCanvas();
       }
     }
@@ -129,9 +155,12 @@ export class Game {
       this.isClicked = false;
 
       let shapeId: number = -1;
-      if (this.selectedShape?.type === 'rect' && this.selectedShape.id) {
-        shapeId = this.selectedShape.id;
-      }
+      if (this.selectedShape?.type != 'pointer' && this.selectedShape?.id) {
+        shapeId = this.selectedShape?.id;
+      } 
+      // else if (this.selectedShape?.type === 'circle' && this.selectedShape.id) {
+        // shapeId = this.selectedShape.id;
+      // } else if
       this.ws.send(
         JSON.stringify({
           type: "update_shape",
@@ -206,7 +235,7 @@ export class Game {
         // Clicked on a shape
         this.selectedShape = hitResult;
         if (hitResult.type === 'rect') {
-          this.updateRectSelectors(hitResult);
+          this.updateSelectors(hitResult);
         } else if (hitResult.type === 'circle') {
           const radius = 6;
           this.shapeSelectors = [];
@@ -240,38 +269,66 @@ export class Game {
     }
   };
 
-  updateRectSelectors = (shape: Shape) => {
-    if (shape.type !== "rect") return;
-    const radius = 6;
-    this.shapeSelectors = [];
-    this.shapeSelectors.push({
-      id: 1,
-      centerX: shape.startX,
-      centerY: shape.startY,
-      radius,
-      type: "selector",
-    });
-    this.shapeSelectors.push({
-      id: 2,
-      centerX: shape.startX + shape.width,
-      centerY: shape.startY,
-      radius,
-      type: "selector",
-    });
-    this.shapeSelectors.push({
-      id: 3,
-      centerX: shape.startX + shape.width,
-      centerY: shape.startY + shape.height,
-      radius,
-      type: "selector",
-    });
-    this.shapeSelectors.push({
-      id: 4,
-      centerX: shape.startX,
-      centerY: shape.startY + shape.height,
-      radius,
-      type: "selector",
-    });
+  updateSelectors = (shape: Shape) => {
+    if (shape.type === "rect") {
+      const radius = 6;
+      this.shapeSelectors = [];
+      this.shapeSelectors.push({
+        id: 1,
+        centerX: shape.startX,
+        centerY: shape.startY,
+        radius,
+        type: "selector",
+      });
+      this.shapeSelectors.push({
+        id: 2,
+        centerX: shape.startX + shape.width,
+        centerY: shape.startY,
+        radius,
+        type: "selector",
+      });
+      this.shapeSelectors.push({
+        id: 3,
+        centerX: shape.startX + shape.width,
+        centerY: shape.startY + shape.height,
+        radius,
+        type: "selector",
+      });
+      this.shapeSelectors.push({
+        id: 4,
+        centerX: shape.startX,
+        centerY: shape.startY + shape.height,
+        radius,
+        type: "selector",
+      });
+    } else if (shape.type === "circle") {
+      const radius = 6;
+      this.shapeSelectors = [];
+      this.shapeSelectors.push({
+        id: 1,
+        centerX: shape.centerX,
+        centerY: shape.centerY,
+        radius,
+        type: "selector",
+      });
+    } else if (shape.type === "line") {
+      const radius = 6;
+      this.shapeSelectors = [];
+      this.shapeSelectors.push({
+        id: 1,
+        centerX: shape.startX,
+        centerY: shape.startY,
+        radius,
+        type: "selector",
+      });
+      this.shapeSelectors.push({
+        id: 2,
+        centerX: shape.endX,
+        centerY: shape.endY,
+        radius,
+        type: "selector",
+      });
+    }
   };
 
   hitTest = (x: number, y: number) => {
