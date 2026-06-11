@@ -11,7 +11,7 @@ interface JwtPayload {
   // Add other properties if they exist in your JWT payload
 }
 
-const wss = new WebSocketServer({ port: 8080 });
+const wss = new WebSocketServer({ port: 8082 });
 
 const checkUser = (token: string): JwtPayload | null => {
   try {
@@ -74,30 +74,35 @@ wss.on("connection", (ws, req) => {
     }
 
     if (data.type === "chat") {
-      const shape = await prismaClient.shapes.create({
-        data: {
-          roomId: Number(data.roomId),
-          shape: data.shape,
-        },
-      });
+      
+      try {
+        const shape = await prismaClient.shapes.create({
+          data: {
+            roomId: Number(data.roomId),
+            shape: data.shape,
+          },
+        });
 
-      const newShape = {
-        id: shape.id,
-        shape: JSON.parse(data.shape),
+        const newShape = {
+          id: shape.id,
+          shape: JSON.parse(data.shape),
+        };
+
+        users.forEach((user) => {
+          if (user.rooms.includes(data.roomId)) {
+            user.ws.send(
+              JSON.stringify({
+                type: "shape created",
+                shape: newShape,
+                roomId: data.roomId,
+                from: userAuthenticated.userId,
+              })
+            );
+          }
+        });
+      } catch (e) {
+        console.error("Failed to create shape:", e);
       }
-
-      users.forEach((user) => {
-        if (user.rooms.includes(data.roomId)) {
-          user.ws.send(
-            JSON.stringify({
-              type: "shape created",
-              shape: newShape,
-              roomId: data.roomId,
-              from: userAuthenticated.userId,
-            })
-          );
-        }
-      });
     }
 
     if (data.type == "clear") {
@@ -126,22 +131,26 @@ wss.on("connection", (ws, req) => {
     if (data.type === "update_shape") {
       const shapeId = Number(data.shapeId);
 
-      const updatedShape = await prismaClient.shapes.update({
-        where: { id: shapeId },
-        data: { shape: data.shape },
-      });
-      
-      users.forEach((user) => {
-        if (user.rooms.includes(data.room)) {
-          user.ws.send(
-            JSON.stringify({
-              type: "shape_updated",
-              shape: updatedShape,
-              from: userAuthenticated.userId,
-            })
-          );
-        }
-      });
+      try {
+        const updatedShape = await prismaClient.shapes.update({
+          where: { id: shapeId },
+          data: { shape: data.shape },
+        });
+
+        users.forEach((user) => {
+          if (user.rooms.includes(data.room)) {
+            user.ws.send(
+              JSON.stringify({
+                type: "shape_updated",
+                shape: updatedShape,
+                from: userAuthenticated.userId,
+              })
+            );
+          }
+        });
+      } catch (e) {
+        console.error("Failed to update shape:", e);
+      }
     }
   });
 });

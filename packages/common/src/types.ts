@@ -19,5 +19,5 @@ export const signInSchema = z.object({
 });
 
 export const roomSchema = z.object({
-  slug: z.string().min(1),
+  slug: z.number().min(1),
 });

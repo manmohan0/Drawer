@@ -14,8 +14,11 @@ export const AuthPage = ({ isSignIn } : { isSignIn: boolean }) => {
             <Button
                 label={isSignIn ? "Sign In" : "Sign Up"}
                 onClick={() => console.log(isSignIn ? "Signing In" : "Signing Up")}
+                isPrimary={true}
             />
         </div>
     </div>
   </div>;
 }
+
+export default AuthPage;

@@ -1,6 +1,6 @@
 import { Game } from "@/Draw/Game";
 import { ShapeType } from "@/types";
-import { Circle, PencilLine, Pointer, RectangleHorizontal } from "lucide-react";
+import { Circle, PencilLine, Pointer, RectangleHorizontal, Image } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 
 export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
@@ -11,7 +11,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
     { name: "rect", logo: <RectangleHorizontal /> },
     { name: "line", logo: <PencilLine /> },
     { name: "circle", logo: <Circle /> },
-    { name: "pointer", logo: <Pointer /> },
+    { name: "image", logo: <Image /> },
+    { name: "pointer", logo: <Pointer /> }
   ];
 
   useEffect(() => {

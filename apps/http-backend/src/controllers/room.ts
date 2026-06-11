@@ -16,7 +16,7 @@ export const createRoom = async (req: Request, res: Response) => {
   try {
     const newRoom = await prismaClient.room.create({
       data: {
-        slug: parsedBody.data.slug,
+        slug: Number(parsedBody.data.slug),
         adminId: req.userId as string,
       },
     });
@@ -29,7 +29,7 @@ export const createRoom = async (req: Request, res: Response) => {
 
 export const getChatsByRoomId = async (req: Request, res: Response) => {
   const { roomId } = req.params;
-  
+
   if (!roomId) {
     res.status(400).json({ message: "Room ID is required" });
     return;
@@ -51,7 +51,7 @@ export const getChatsBySlug = async (req: Request, res: Response) => {
 
   try {
     const room = await prismaClient.room.findFirst({
-      where: { slug }
+      where: { slug: Number(slug) }
     })
     if (!room) {
       res.status(404).json({ message: "Room not found" });

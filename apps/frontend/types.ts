@@ -19,6 +19,14 @@ export type Shape = {
     centerY: number;
     radius: number;
 } | {
+    id?: number,
+    type: 'image',
+    url?: string,
+    startX: number,
+    startY: number,
+    width: number,
+    height: number
+} | {
     type: 'pointer',
     x: number,
     y: number
@@ -32,4 +40,4 @@ export type selector = {
     radius: number;
 }
 
-export type ShapeType = 'rect' | 'line' | 'circle' | 'pointer';
+export type ShapeType = 'rect' | 'line' | 'circle' | 'image' | 'pointer';
