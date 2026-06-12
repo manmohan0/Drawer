@@ -152,5 +152,29 @@ wss.on("connection", (ws, req) => {
         console.error("Failed to update shape:", e);
       }
     }
+
+    if (data.type === "delete_shape") {
+      const shapeId = Number(data.shapeId);
+      
+      try {
+        await prismaClient.shapes.delete({
+          where: { id: shapeId },
+        });
+
+        users.forEach((user) => {
+          if (user.rooms.includes(data.room)) {
+            user.ws.send(
+              JSON.stringify({
+                type: "shape_deleted",
+                shapeId: shapeId,
+                from: userAuthenticated.userId,
+              })
+            );
+          }
+        });
+      } catch (e) {
+        console.error("Failed to delete the shape:", e);
+      }
+    }
   });
 });

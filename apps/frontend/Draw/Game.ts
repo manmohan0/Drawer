@@ -658,6 +658,29 @@ export class Game {
     }
   };
 
+  oneTimeKeyboardPressHandler = (e: KeyboardEvent) => {
+    if (e.repeat) return;
+    console.log(e.key)
+    if (e.key === 'Delete') {
+      if (this.selectedShape) {
+        this.deleteSelectedShape();
+      }
+    }
+  };
+
+  deleteSelectedShape = () => {
+    if (!this.selectedShape || this.selectedShape.type === "pointer") return;
+    this.ws.send(
+      JSON.stringify({
+        type: "delete_shape",
+        room: this.roomId,
+        shapeId: this.selectedShape.id || -1,
+      })
+    );
+    // this.existingShapes = this.existingShapes.filter((shape) => (shape.type !== "pointer" && shape.id) !== (this.selectedShape!.type !== "pointer" && this.selectedShape!.id));
+    // this.selectedShape = null;
+    // this.clearCanvas();
+  };
   /**
    * Dynamically constructs the interactive resize handles (selectors) for the selected shape.
    * Handlers scale inverse to the zoom level so they remain visually legible at different zoom levels.
@@ -853,6 +876,16 @@ export class Game {
         }
       }
 
+      if (data.type === "shape_deleted") {
+        const shape = this.existingShapes.find((s) => s.type !== "pointer" && s.id === data.shapeId);
+        if (shape) {
+          this.existingShapes = this.existingShapes.filter((s) => s.type !== "pointer" && s.id !== data.shapeId);
+          this.selectedShape = null;
+          this.shapeSelectors = [];
+          this.clearCanvas();
+        }
+      }
+
       // Remote user cleared the canvas
       if (data.type == "cleared") {
         this.existingShapes = [];
@@ -914,6 +947,7 @@ export class Game {
   initKeyboardHandlers = () => {
     window.addEventListener("keydown", this.keyboardDownHandler);
     window.addEventListener("keyup", this.keyboardUpHandler);
+    window.addEventListener("keydown", this.oneTimeKeyboardPressHandler)
   };
 
   /**
@@ -1057,5 +1091,6 @@ export class Game {
     this.canvas.removeEventListener("wheel", this.mouseWheelHandler);
     this.canvas.removeEventListener("keydown", this.keyboardDownHandler);
     this.canvas.removeEventListener("keyup", this.keyboardUpHandler);
+    this.canvas.removeEventListener("keydown", this.oneTimeKeyboardPressHandler);
   };
 }
