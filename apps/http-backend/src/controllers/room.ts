@@ -66,17 +66,26 @@ export const getChatsBySlug = async (req: Request, res: Response) => {
 export const getExistingShapesById = async (req: Request, res: Response) => {
   let { roomId } = req.params;
 
-  const RoomId = Number(roomId);
   try {
+    const room = await prismaClient.room.findUnique({
+      where: { slug: Number(roomId) }
+    });
+
+    if (!room) {
+      res.status(404).json({ message: "Room not found" });
+      return;
+    }
+
     const shapes = await prismaClient.shapes.findMany({
       where: {
-        roomId: RoomId
+        roomId: room.id
       }
     })
 
     const correctShapes = shapes.map(shape => {
       const curShape = {
         id: shape.id,
+        userId: shape.userId,
         ...JSON.parse(shape.shape)
       }
       return curShape;

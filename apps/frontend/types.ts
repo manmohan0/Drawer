@@ -5,6 +5,7 @@ export type Shape = {
     startY: number;
     width: number;
     height: number;
+    userId?: string;
 } | {
     id?: number;
     type: 'line';
@@ -12,12 +13,14 @@ export type Shape = {
     startY: number;
     endX: number;
     endY: number;
+    userId?: string;
 } | {
     id?: number;
     type: 'circle';
     centerX: number;
     centerY: number;
     radius: number;
+    userId?: string;
 } | {
     id?: number,
     type: 'image',
@@ -26,10 +29,11 @@ export type Shape = {
     startY: number,
     width: number,
     height: number
+    userId?: string;
 } | {
     type: 'pointer',
     x: number,
-    y: number
+    y: number,
 }
 
 export type selector = {

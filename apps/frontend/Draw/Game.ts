@@ -1,5 +1,6 @@
 import { BACKEND_URL } from "@/config";
 import { selector, Shape, ShapeType } from "@/types";
+import { getCookie } from "@/utils/cookie";
 import axios from "axios";
 
 /**
@@ -45,17 +46,23 @@ export class Game {
   private zoom: number = 1;
   // Cache for loaded images to draw them synchronously
   private imageCache: Map<string, HTMLImageElement> = new Map();
+  //map of userIds and their details
+  private users: Record<string, {firstName: string, lastName: string}> = {};
+  private myUserId: string | null = null;
+  private onSelectionChange?: (shape: Shape | null) => void;
 
   /**
    * Initializes the Game whiteboard session.
    * @param canvas The target canvas element to draw on.
    * @param roomId The unique room ID representing the drawing session.
    * @param ws The established WebSocket connection to sync room updates.
+   * @param onSelectionChange Optional callback invoked when the selected shape changes or is edited.
    */
-  constructor(canvas: HTMLCanvasElement, roomId: string, ws: WebSocket) {
+  constructor(canvas: HTMLCanvasElement, roomId: string, ws: WebSocket, onSelectionChange?: (shape: Shape | null) => void) {
     this.canvas = canvas;
     this.roomId = roomId;
     this.ws = ws;
+    this.onSelectionChange = onSelectionChange;
     this.ctx = canvas.getContext("2d")!;
     this.existingShapes = [];
     this.isClicked = false;
@@ -73,6 +80,12 @@ export class Game {
    */
   setTool = (tool: ShapeType) => {
     this.selectedTool = tool;
+    if (tool !== "pointer" && this.selectedShape) {
+      this.selectedShape = null;
+      this.shapeSelectors = [];
+      this.clearCanvas();
+      this.triggerSelectionChange();
+    }
   };
 
   /**
@@ -81,6 +94,26 @@ export class Game {
    */
   getTool = () => {
     return this.selectedTool;
+  };
+
+  /**
+   * Exposes helper to get user's display name from their ID.
+   */
+  getUserName = (userId?: string): string | null => {
+    if (!userId) return null;
+    if (userId === this.myUserId) return "You";
+    const user = this.users[userId];
+    return user ? `${user.firstName} ${user.lastName}`.trim() : null;
+  };
+
+  private triggerSelectionChange = () => {
+    if (this.onSelectionChange) {
+      if (this.selectedShape) {
+        this.onSelectionChange({ ...this.selectedShape });
+      } else {
+        this.onSelectionChange(null);
+      }
+    }
   };
 
   /**
@@ -176,6 +209,7 @@ export class Game {
         if (!base64Url) return;
         shape.url = base64Url;
         this.clearCanvas();
+        this.triggerSelectionChange();
         this.ws.send(
           JSON.stringify({
             type: "update_shape",
@@ -424,6 +458,7 @@ export class Game {
         }
       }
       this.clearCanvas();
+      this.triggerSelectionChange();
     }
   };
 
@@ -439,7 +474,7 @@ export class Game {
     }
 
     // If we were resizing or moving an existing shape, push the update to the server
-    if (this.draggedSelector) {
+    if (this.draggedSelector || (this.selectedTool === "pointer" && this.originalShape)) {
       this.isClicked = false;
 
       let shapeId: number = -1;
@@ -471,6 +506,7 @@ export class Game {
 
       this.draggedSelector = null;
       this.originalShape = null;
+      this.triggerSelectionChange();
 
       return;
     }
@@ -481,6 +517,10 @@ export class Game {
     const width = currentX - this.startX;
     const height = currentY - this.startY;
 
+    if (!this.myUserId) {
+      console.error("No user ID found");
+      return;
+    }
     // Map the local mouse release geometry into a new Shape payload
     let shape: Shape;
     if (this.selectedTool === "line") {
@@ -533,6 +573,7 @@ export class Game {
         type: "chat",
         roomId: this.roomId,
         shape: JSON.stringify(shape),
+        userId: this.myUserId
       })
     );
   };
@@ -551,11 +592,13 @@ export class Game {
         // Clicked on empty canvas space -> Deselect currently selected shape
         this.selectedShape = null;
         this.shapeSelectors = [];
+        this.triggerSelectionChange();
       } else if (hitResult.type === "selector") {
         // Clicked on a resize handle selector -> Selection state remains unchanged
       } else {
         // Clicked on a shape body -> Set selection and build corresponding resize handle coordinates
         this.selectedShape = hitResult;
+        this.triggerSelectionChange();
 
         // Check if clicked inside the middle 1/3 of an image placeholder shape to trigger upload
         if (hitResult.type === "image" && !hitResult.url) {
@@ -660,10 +703,32 @@ export class Game {
 
   oneTimeKeyboardPressHandler = (e: KeyboardEvent) => {
     if (e.repeat) return;
-    console.log(e.key)
+
     if (e.key === 'Delete') {
       if (this.selectedShape) {
         this.deleteSelectedShape();
+      }
+    }
+  };
+
+  updateShape = (updatedShape: Shape) => {
+    if (updatedShape.type !== "pointer" && updatedShape.id) {
+      const shapeIndex = this.existingShapes.findIndex((s) => s.type !== "pointer" && s.id === updatedShape.id);
+      if (shapeIndex !== -1) {
+        this.existingShapes[shapeIndex] = updatedShape;
+        this.selectedShape = updatedShape;
+        this.updateSelectors(updatedShape);
+        this.clearCanvas();
+        this.triggerSelectionChange();
+
+        this.ws.send(
+          JSON.stringify({
+            type: "update_shape",
+            room: this.roomId,
+            shapeId: updatedShape.id,
+            shape: JSON.stringify(updatedShape),
+          })
+        );
       }
     }
   };
@@ -854,12 +919,19 @@ export class Game {
     this.ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
 
+      if (data.type == "joined_room") {
+        this.users = data.curRoomUsers;
+        this.myUserId = data.myUserId
+      }
+
       // Remote user created a shape
       if (data.type == "shape created") {
         const shape = {
           id: data.shape.id,
+          userId: data.userId,
           ...data.shape.shape,
         };
+
         this.existingShapes.push(shape);
         this.clearCanvas();
       }
@@ -873,6 +945,9 @@ export class Game {
           const updatedShape = JSON.parse(data.shape.shape);
           Object.assign(shape, updatedShape);
           this.clearCanvas();
+          if (this.selectedShape && this.selectedShape.type !== "pointer" && this.selectedShape.id === data.shape.id) {
+            this.triggerSelectionChange();
+          }
         }
       }
 
@@ -880,8 +955,11 @@ export class Game {
         const shape = this.existingShapes.find((s) => s.type !== "pointer" && s.id === data.shapeId);
         if (shape) {
           this.existingShapes = this.existingShapes.filter((s) => s.type !== "pointer" && s.id !== data.shapeId);
-          this.selectedShape = null;
-          this.shapeSelectors = [];
+          if (this.selectedShape && this.selectedShape.type !== "pointer" && this.selectedShape.id === data.shapeId) {
+            this.selectedShape = null;
+            this.shapeSelectors = [];
+            this.triggerSelectionChange();
+          }
           this.clearCanvas();
         }
       }
@@ -889,9 +967,20 @@ export class Game {
       // Remote user cleared the canvas
       if (data.type == "cleared") {
         this.existingShapes = [];
+        this.selectedShape = null;
+        this.shapeSelectors = [];
         this.clearCanvas();
+        this.triggerSelectionChange();
       }
     };
+
+    // Send the join_room message after onmessage listener is registered to prevent race conditions
+    this.ws.send(
+      JSON.stringify({
+        type: "join_room",
+        roomId: this.roomId,
+      })
+    );
   };
 
   /**
@@ -959,10 +1048,7 @@ export class Game {
   getExistingShapes = async (canvasId: string) => {
     try {
       const res = await axios.get(`${BACKEND_URL}/room/shapes/${canvasId}`, {
-        headers: {
-          authorization:
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI1ODY4Mjg2ZC05Y2MzLTQzNzktOWFkZi0xN2QzMTRmNmRiM2MiLCJpYXQiOjE3NjExMDI4NTB9.c3OUsVFIqFbIazy4CXcQmF2kJKEfF2jbWUgi-YphCxw",
-        },
+        withCredentials: true
       });
       const data = res.data.shapes;
       return data;

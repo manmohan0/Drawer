@@ -25,21 +25,29 @@ const checkUser = (token: string): JwtPayload | null => {
 
 interface User {
   userId: string;
+  firstName: string;
+  lastName: string;
   ws: WebSocket;
   rooms: string[];
 }
 
 const users: User[] = [];
 
-wss.on("connection", (ws, req) => {
+wss.on("connection", async (ws, req) => {
   const url = req.url;
 
   if (!url) {
     return;
   }
 
-  const quertParams = new URLSearchParams(url?.split("?")[1]);
-  const token = quertParams.get("token") || "";
+  const token = req.headers.cookie?.split('Authorization=')[1]?.split(';')[0];
+
+  if (!token) {
+    console.error("No token found in cookies");
+    ws.send(JSON.stringify({ type: "error", message: "No authorization cookie found" }));
+    ws.close();
+    return;
+  }
 
   const userAuthenticated = checkUser(token);
 
@@ -48,21 +56,52 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
-  users.push({
-    userId: userAuthenticated?.userId,
+  const userObj: User = {
+    userId: userAuthenticated.userId,
+    firstName: "",
+    lastName: "",
     ws,
     rooms: [],
+  };
+  users.push(userObj);
+
+  prismaClient.user.findUnique({
+    where: { id: userAuthenticated.userId }
+  }).then((dbUser) => {
+    if (dbUser) {
+      userObj.firstName = dbUser.firstName;
+      userObj.lastName = dbUser.lastName;
+    } else {
+      ws.send(JSON.stringify({ type: "error", message: "User not found" }));
+      ws.close();
+      const idx = users.indexOf(userObj);
+      if (idx !== -1) users.splice(idx, 1);
+    }
+  }).catch((e) => {
+    console.error("Failed to query user details:", e);
   });
 
   ws.on("message", async (message) => {
     const data = JSON.parse(message.toString());
-
+    
     if (data.type === "join_room") {
       const user = users.find((u) => u.ws === ws);
       if (user && !user.rooms.includes(data.roomId)) {
         user.rooms.push(data.roomId);
       }
-      ws.send(JSON.stringify({ type: "joined_room", room: data.room }));
+
+      const curRoomUsers: Record<string, { firstName: string; lastName: string }> = {};
+      users
+        .filter((u) => u.rooms.includes(data.roomId))
+        .forEach((u) => {
+          curRoomUsers[u.userId] = {
+            firstName: u.firstName,
+            lastName: u.lastName,
+          };
+        });
+
+      const myUserId = userAuthenticated.userId;
+      ws.send(JSON.stringify({ type: "joined_room", room: data.roomId, curRoomUsers, myUserId }));
     }
 
     if (data.type === "leave_room") {
@@ -74,18 +113,28 @@ wss.on("connection", (ws, req) => {
     }
 
     if (data.type === "chat") {
-      
       try {
+        const room = await prismaClient.room.findUnique({
+          where: { slug: Number(data.roomId) }
+        });
+
+        if (!room) {
+          console.error("Room not found for slug:", data.roomId);
+          return;
+        }
+
         const shape = await prismaClient.shapes.create({
           data: {
-            roomId: Number(data.roomId),
+            roomId: room.id,
             shape: data.shape,
+            userId: userAuthenticated.userId
           },
         });
 
         const newShape = {
           id: shape.id,
           shape: JSON.parse(data.shape),
+          userId: userAuthenticated.userId,
         };
 
         users.forEach((user) => {
@@ -95,7 +144,7 @@ wss.on("connection", (ws, req) => {
                 type: "shape created",
                 shape: newShape,
                 roomId: data.roomId,
-                from: userAuthenticated.userId,
+                userId: userAuthenticated.userId,
               })
             );
           }
@@ -107,9 +156,18 @@ wss.on("connection", (ws, req) => {
 
     if (data.type == "clear") {
       try {
+        const room = await prismaClient.room.findUnique({
+          where: { slug: Number(data.roomId) }
+        });
+
+        if (!room) {
+          console.error("Room not found for slug:", data.roomId);
+          return;
+        }
+
         await prismaClient.shapes.deleteMany({
           where: {
-            roomId: Number(data.roomId),
+            roomId: room.id,
           },
         });
 

@@ -3,15 +3,18 @@ import dotenv from "dotenv";
 import cors from "cors"
 import authRouter from "./routes/auth.route.js";
 import roomRouter from "./routes/room.route.js";
+import { cookieParser } from "./middlewares/cookieParser.middleware.js";
 
 dotenv.config();
 
 const app = express();
 
 app.use(cors({
-  origin: "*"
+  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  credentials: true,
 }))
 
+app.use(cookieParser);
 app.use(express.json());
 app.use('/auth', authRouter);
 app.use('/room', roomRouter);

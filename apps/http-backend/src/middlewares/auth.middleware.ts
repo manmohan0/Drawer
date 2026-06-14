@@ -10,7 +10,7 @@ export const authMiddleware = (
   res: Response,
   next: NextFunction,
 ) => {
-  const authToken = req.headers["authorization"] || "";
+  const authToken = (req.headers["authorization"] || req.cookies?.["Authorization"] || "") as string;
   try {
     const decodedUser = jwt.verify(
       authToken,

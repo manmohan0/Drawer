@@ -29,14 +29,14 @@ export const signUp = async (req: Request, res: Response) => {
 
   const hashedPassword = bcryptjs.hashSync(parsedBody.data.password, 12);
 
-  await prismaClient.user.create({
+  console.log(await prismaClient.user.create({
     data: {
       firstName: parsedBody.data.firstName,
       lastName: parsedBody.data.lastName,
       email: parsedBody.data.email,
       password: hashedPassword,
     },
-  });
+  }));
 
   res.status(201).json({ message: "User created successfully" });
 };
@@ -58,6 +58,7 @@ export const signIn = async (req: Request, res: Response) => {
     },
   });
 
+  console.log(await prismaClient.user.findMany())
   if (!user) {
     res.status(400).json({ message: "User does not exist" });
     return;
@@ -74,6 +75,13 @@ export const signIn = async (req: Request, res: Response) => {
   }
 
   const authToken = jwt.sign({ userId: user.id }, JWT_SECRET);
+
+  res.cookie("Authorization", authToken, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+  });
 
   res.status(200).json({ message: "Sign-in successful", authToken });
   return;

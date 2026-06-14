@@ -2,18 +2,16 @@
 import { WS_URL } from "@/config";
 import { useEffect, useState } from "react";
 import { Canvas } from "./Canvas";
+import { getCookie } from "@/utils/cookie";
 
 export const RoomCanvas = ({ roomId } : { roomId: string }) => {
     const [WS, setWS] = useState<WebSocket | null>(null);
 
     useEffect(() => {
-        const ws = new WebSocket(WS_URL);
+        const token = getCookie("Authorization") || "";
+        const ws = new WebSocket(`${WS_URL}?token=${token}`);
         ws.onopen = () => {
             setWS(ws);
-            ws.send(JSON.stringify({
-                type: "join_room",
-                roomId
-            }))
         }
 
         ws.onclose = (e) => {
@@ -21,10 +19,12 @@ export const RoomCanvas = ({ roomId } : { roomId: string }) => {
         }
 
         return () => {
-            ws.send(JSON.stringify({
-                type: "leave_room",
-                roomId
-            }));
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: "leave_room",
+                    roomId
+                }));
+            }
             ws.close();
         }
     }, [roomId])
@@ -35,5 +35,5 @@ export const RoomCanvas = ({ roomId } : { roomId: string }) => {
         </div>
     }
 
-    return <Canvas roomId={roomId} ws={WS} />
+    return <Canvas roomId={roomId} ws={WS}/>
 }

@@ -23,6 +23,7 @@ model User {
   updatedAt DateTime @updatedAt
   rooms     Room[]
   chats     Chat[]
+  shapes    Shapes[]
 }
 
 model Room {
@@ -51,5 +52,7 @@ model Shapes {
   roomId    Int
   createdAt DateTime @default(now())
   shape     String
+  userId    String
   room      Room     @relation(fields: [roomId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 }
