@@ -1,6 +1,8 @@
+import { BACKEND_URL } from "@/config";
 import { Game } from "@/Draw/Game";
 import { Shape, ShapeType } from "@/types";
-import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash } from "lucide-react";
+import axios from "axios";
+import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2 } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 
 export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
@@ -8,6 +10,61 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   const [game, setGame] = useState<Game>();
   const [tool, setTool] = useState<ShapeType>("rect");
   const [selectedShape, setSelectedShape] = useState<Shape | null>(null);
+  const [prompt, setPrompt] = useState<string>("");
+  const [tempShapes, setTempShapes] = useState<Shape[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handlePromptSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prompt.trim() || loading) return;
+
+    setLoading(true);
+    setError(null);
+    setTempShapes([]);
+
+    try {
+      const res = await axios.post(`${BACKEND_URL}/ai/generate`, { prompt }, {
+        withCredentials: true
+      });
+
+      if (res && res.data.success) {
+        const shapesData = res.data.shapes;
+        const shapesArray = Array.isArray(shapesData) ? shapesData : (shapesData?.shapes || []);
+        if (shapesArray.length === 0) {
+          setError("AI did not generate any shapes for this prompt.");
+        } else {
+          setTempShapes(shapesArray);
+        }
+      } else {
+        setError("Something went wrong on the AI server.");
+      }
+    } catch (err: any) {
+      console.error("Failed to generate shapes:", err);
+      setError(
+        err.response?.data?.message || 
+        "Failed to generate shapes. Please make sure GEMINI_API_KEY is configured in http-backend env."
+      );
+    } finally {
+      setLoading(false);
+      setPrompt("");
+    }
+  };
+
+  const handleAcceptShapes = () => {
+    ws.send(
+      JSON.stringify({
+        type: "chat-multiple",
+        roomId,
+        shapes: tempShapes,
+      })
+    );
+    setTempShapes([]);
+  };
+
+  const handleRejectShapes = () => {
+    setTempShapes([]);
+  };
   const types = [
     { name: "rect", logo: <RectangleHorizontal /> },
     { name: "line", logo: <PencilLine /> },
@@ -28,6 +85,12 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       };
     }
   }, [canvasRef, roomId, ws]);
+
+  useEffect(() => {
+    if (game) {
+      game.setTempShapes(tempShapes);
+    }
+  }, [tempShapes, game]);
 
   const onTypeChange = (type: ShapeType) => {
     game?.setTool(type);
@@ -230,6 +293,71 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
         >
           Clear
         </div>
+      </div>
+
+      {/* AI Preview Controls & Error Messages */}
+      <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-lg px-4 sm:px-0 flex flex-col items-center space-y-2 pointer-events-none">
+        {error && (
+          <div className="w-full flex items-center justify-between bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-2xl shadow-xl pointer-events-auto animate-in fade-in duration-200">
+            <span className="text-xs font-semibold">{error}</span>
+            <button 
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-600 transition-colors p-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {tempShapes.length > 0 && (
+          <div className="flex items-center space-x-3 bg-white/95 backdrop-blur-md border border-indigo-100 shadow-2xl rounded-2xl px-4 py-3 pointer-events-auto animate-in fade-in duration-200">
+            <span className="text-xs font-semibold text-gray-700">
+              AI generated {tempShapes.length} shapes
+            </span>
+            <button
+              onClick={handleAcceptShapes}
+              className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer shadow-sm"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Accept</span>
+            </button>
+            <button
+              onClick={handleRejectShapes}
+              className="flex items-center space-x-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 hover:border-red-200 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Reject</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* AI Request Input Bar */}
+      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-lg px-4 sm:px-0">
+        <form 
+          onSubmit={handlePromptSubmit} 
+          className="flex items-center space-x-2 bg-white/90 backdrop-blur-md border border-gray-200/50 shadow-2xl rounded-2xl p-1.5 transition-all duration-300 hover:shadow-indigo-100/40 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100"
+        >
+          <input
+            type="text"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            disabled={loading}
+            placeholder={loading ? "AI is thinking and drawing..." : "Ask AI to draw something... (e.g. 'draw a red circle')"}
+            className="flex-1 bg-transparent border-none outline-none pl-3 text-sm text-gray-800 placeholder-gray-400 py-2 w-full focus:ring-0 disabled:text-gray-400"
+          />
+          <button
+            type="submit"
+            disabled={!prompt.trim() || loading}
+            className="flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-100 text-white disabled:text-gray-400 p-2.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer shadow-md disabled:shadow-none"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+          </button>
+        </form>
       </div>
     </div>
   );

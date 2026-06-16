@@ -154,6 +154,54 @@ wss.on("connection", async (ws, req) => {
       }
     }
 
+    if (data.type === "chat-multiple") {
+      try {
+        const room = await prismaClient.room.findUnique({
+          where: { slug: Number(data.roomId) }
+        });
+
+        if (!room) {
+          console.error("Room not found for slug:", data.roomId);
+          return;
+        }
+
+        const shapes = await Promise.all(
+          data.shapes.map((s: any) =>
+            prismaClient.shapes.create({
+              data: {
+                roomId: room.id,
+                shape: typeof s === 'string' ? s : JSON.stringify(s),
+                userId: userAuthenticated.userId
+              }
+            })
+          )
+        );
+
+        shapes.forEach((createdShape) => {
+          const newShape = {
+            id: createdShape.id,
+            shape: JSON.parse(createdShape.shape),
+            userId: userAuthenticated.userId,
+          };
+
+          users.forEach((user) => {
+            if (user.rooms.includes(data.roomId)) {
+              user.ws.send(
+                JSON.stringify({
+                  type: "shape created",
+                  shape: newShape,
+                  roomId: data.roomId,
+                  userId: userAuthenticated.userId,
+                })
+              );
+            }
+          });
+        });
+      } catch (e) {
+        console.error("Failed to create shapes:", e);
+      }
+    }
+
     if (data.type == "clear") {
       try {
         const room = await prismaClient.room.findUnique({
