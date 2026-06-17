@@ -21,7 +21,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
     value: string;
     fontSize: number;
     onSave: (val: string) => void;
-    onCancel: () => void;
+    onCancel: () => void; 
   } | null>(null);
 
   const handlePromptSubmit = async (e: React.FormEvent) => {
