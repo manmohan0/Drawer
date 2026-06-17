@@ -17,6 +17,9 @@ export const generateShapes = async (req: Request, res: Response) => {
                     startY: number;
                     width: number;
                     height: number;
+                    bg_color?: string;
+                    color?: string;
+                    zIndex?: number;
                     userId?: string;
                 } | {
                     id?: number;
@@ -25,6 +28,8 @@ export const generateShapes = async (req: Request, res: Response) => {
                     startY: number;
                     endX: number;
                     endY: number;
+                    color?: string;
+                    zIndex?: number;
                     userId?: string;
                 } | {
                     id?: number;
@@ -32,6 +37,9 @@ export const generateShapes = async (req: Request, res: Response) => {
                     centerX: number;
                     centerY: number;
                     radius: number;
+                    bg_color?: string;
+                    color?: string;
+                    zIndex?: number;
                     userId?: string;
                 } | {
                     id?: number,
@@ -41,9 +49,11 @@ export const generateShapes = async (req: Request, res: Response) => {
                     startY: number,
                     width: number,
                     height: number
+                    zIndex?: number;
                     userId?: string;
                 }
-
+                bg_color is the fill color in hex code
+                color is the border color in hex code
                 You will be given prompt, use this to generate the shapes. And send the shapes in the format of this schema. send it in JSON format with only this type 'types' array not any other thing. JSON will contain a key "shapes" with value as the shapes array. You have to generate random id for each shape. Also for image type you can use image url from internet.
                 canvas is of size 4320x2160 px
                 `,

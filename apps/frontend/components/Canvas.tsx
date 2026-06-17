@@ -2,7 +2,7 @@ import { BACKEND_URL } from "@/config";
 import { Game } from "@/Draw/Game";
 import { Shape, ShapeType } from "@/types";
 import axios from "axios";
-import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2 } from "lucide-react";
+import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2, PaintBucket, ArrowUp, ArrowDown, Type } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 
 export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
@@ -14,6 +14,15 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   const [tempShapes, setTempShapes] = useState<Shape[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [color, setColor] = useState("#000000");
+  const [textEditState, setTextEditState] = useState<{
+    x: number;
+    y: number;
+    value: string;
+    fontSize: number;
+    onSave: (val: string) => void;
+    onCancel: () => void;
+  } | null>(null);
 
   const handlePromptSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,12 +74,19 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   const handleRejectShapes = () => {
     setTempShapes([]);
   };
+
+  const onColorChange = (newColor: string) => {
+    setColor(newColor);
+    game?.setColor(newColor);
+  };
   const types = [
     { name: "rect", logo: <RectangleHorizontal /> },
     { name: "line", logo: <PencilLine /> },
     { name: "circle", logo: <Circle /> },
     { name: "image", logo: <Image /> },
-    { name: "pointer", logo: <Pointer /> }
+    { name: "text", logo: <Type /> },
+    { name: "bucket", logo: <PaintBucket /> },
+    { name: "pointer", logo: <Pointer /> },
   ];
 
   useEffect(() => {
@@ -79,6 +95,18 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       const game = new Game(canvas, roomId, ws, (shape) => {
         setSelectedShape(shape);
       });
+      
+      game.onStartTextEdit = (x, y, text, fontSize, onSave, onCancel) => {
+        setTextEditState({
+          x,
+          y,
+          value: text,
+          fontSize,
+          onSave,
+          onCancel
+        });
+      };
+
       setGame(game);
       return () => {
         game.destroy();
@@ -167,6 +195,18 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
             { label: "URL Status", value: selectedShape.url ? "Loaded" : "No image uploaded", editable: false },
           ]
         };
+      case "text":
+        return {
+          title: "Text",
+          icon: <Type className="w-5 h-5 text-indigo-500" />,
+          bgColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
+          metrics: [
+            { label: "Position X", value: Math.round(selectedShape.startX), key: "startX", editable: true },
+            { label: "Position Y", value: Math.round(selectedShape.startY), key: "startY", editable: true },
+            { label: "Font Size", value: selectedShape.fontSize || 20, key: "fontSize", editable: true },
+            { label: "Text", value: selectedShape.text, key: "text", editable: false },
+          ]
+        };
       default:
         return null;
     }
@@ -185,12 +225,23 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
     game.updateShape(updatedShape);
   };
 
+  const handleColorChange = (key: "color" | "bg_color", newColor: string) => {
+    if (!selectedShape || !game) return;
+
+    const updatedShape = {
+      ...selectedShape,
+      [key]: newColor
+    } as Shape;
+
+    game.updateShape(updatedShape);
+  };
+
   const details = getShapeDetails();
   const creatorName = selectedShape && selectedShape.type !== "pointer" ? game?.getUserName(selectedShape.userId) : null;
   const shapeId = selectedShape && selectedShape.type !== "pointer" ? selectedShape.id : null;
 
   return (
-    <div className="overflow-hidden w-screen h-screen">
+    <div className="relative overflow-hidden w-screen h-screen">
       <canvas
         ref={canvasRef}
         width={"4320px"}
@@ -250,6 +301,64 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               ))}
             </div>
 
+            {/* Colors Section */}
+            {selectedShape && (selectedShape.type === "rect" || selectedShape.type === "circle" || selectedShape.type === "line") && (
+              <div className="pt-3 border-t border-gray-100 space-y-3">
+                <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block">
+                  Colors
+                </span>
+                
+                {/* Border Color */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-600 font-medium">Border Color</span>
+                  <div className="relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group shadow-sm">
+                    <input
+                      type="color"
+                      value={selectedShape.color || "#000000"}
+                      onChange={(e) => handleColorChange("color", e.target.value)}
+                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                    />
+                    <div 
+                      className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
+                      style={{ backgroundColor: selectedShape.color || "#000000" }}
+                    />
+                  </div>
+                </div>
+
+                {/* Fill Color (only for rect and circle) */}
+                {(selectedShape.type === "rect" || selectedShape.type === "circle") && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-600 font-medium">Fill Color</span>
+                    <div className="flex items-center space-x-2">
+                      {/* Transparent toggler */}
+                      <button
+                        onClick={() => handleColorChange("bg_color", "")}
+                        className={`px-2 py-1 text-[10px] font-semibold border rounded-lg transition-all ${
+                          !selectedShape.bg_color 
+                            ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm"
+                            : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                        }`}
+                      >
+                        Transparent
+                      </button>
+                      <div className="relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group shadow-sm">
+                        <input
+                          type="color"
+                          value={selectedShape.bg_color || "#ffffff"}
+                          onChange={(e) => handleColorChange("bg_color", e.target.value)}
+                          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                        />
+                        <div 
+                          className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
+                          style={{ backgroundColor: selectedShape.bg_color || "#ffffff" }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Creator info */}
             <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
               <div className="flex items-center text-gray-500 space-x-1.5">
@@ -265,6 +374,24 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               </span>
             </div>
 
+            {/* Layering Actions */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                onClick={() => game?.bringForward()}
+                className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
+              >
+                <ArrowUp className="w-3.5 h-3.5" />
+                <span>Bring Forward</span>
+              </button>
+              <button
+                onClick={() => game?.sendBackward()}
+                className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
+              >
+                <ArrowDown className="w-3.5 h-3.5" />
+                <span>Send Backward</span>
+              </button>
+            </div>
+
             {/* Actions */}
             <button
               onClick={() => game?.deleteSelectedShape()}
@@ -277,7 +404,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
         </div>
       )}
 
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 border shadow-md rounded-2xl flex space-x-2 p-2 justify-center bg-gray-200">
+      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 border shadow-md rounded-2xl flex space-x-2 p-2 justify-center bg-gray-200 items-center">
         {types.map((type) => (
           <div
             key={type.name}
@@ -287,6 +414,24 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
             {type.logo}
           </div>
         ))}
+
+        {/* Divider */}
+        <div className="h-6 w-px bg-gray-300 self-center"></div>
+
+        {/* Color picker */}
+        <div className="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-colors cursor-pointer group">
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => onColorChange(e.target.value)}
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+          />
+          <div 
+            className="w-5 h-5 rounded-full border border-white shadow-sm transition-transform duration-200 group-hover:scale-110"
+            style={{ backgroundColor: color }}
+          />
+        </div>
+
         <div
           onClick={clearCanvas}
           className="cursor-pointer px-2 py-1 text-gray-400 hover:bg-gray-100 rounded"
@@ -359,6 +504,57 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
           </button>
         </form>
       </div>
+
+      {/* Inline Text Editor Overlay */}
+      {textEditState && (
+        <div
+          contentEditable
+          suppressContentEditableWarning
+          autoFocus
+          onBlur={(e) => {
+            textEditState.onSave(e.currentTarget.textContent || "");
+            setTextEditState(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              textEditState.onSave(e.currentTarget.textContent || "");
+              setTextEditState(null);
+            } else if (e.key === "Escape") {
+              textEditState.onCancel();
+              setTextEditState(null);
+            }
+          }}
+          style={{
+            position: "absolute",
+            left: textEditState.x,
+            top: textEditState.y,
+            fontSize: `${textEditState.fontSize * (game?.getZoom() || 1)}px`,
+            color: game?.getSelectedColor() || "#000000",
+            fontFamily: "sans-serif",
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            padding: 0,
+            margin: 0,
+            zIndex: 1000,
+            minWidth: "100px",
+          }}
+          ref={(el) => {
+            if (el && el.textContent !== textEditState.value) {
+              el.textContent = textEditState.value;
+              const range = document.createRange();
+              const sel = window.getSelection();
+              range.selectNodeContents(el);
+              range.collapse(false);
+              sel?.removeAllRanges();
+              sel?.addRange(range);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };
