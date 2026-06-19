@@ -244,8 +244,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
     <div className="relative overflow-hidden w-screen h-screen">
       <canvas
         ref={canvasRef}
-        width={"4320px"}
-        height={"2160px"}
+        width={4320}
+        height={2160}
         className="bg-[radial-gradient(circle_at_center,#73737330_2px,transparent_1px)] bg-white bg-size-[20px_20px] border-2 border-black"
       ></canvas>
 

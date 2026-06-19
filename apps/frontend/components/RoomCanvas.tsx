@@ -6,10 +6,16 @@ import { getCookie } from "@/utils/cookie";
 
 export const RoomCanvas = ({ roomId } : { roomId: string }) => {
     const [WS, setWS] = useState<WebSocket | null>(null);
+    const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    useEffect(() => {
+        if (!mounted) return;
         const token = getCookie("Authorization") || "";
-        const ws = new WebSocket(`${WS_URL}?token=${token}`);
+        const ws = new WebSocket(`${WS_URL}`);
         ws.onopen = () => {
             setWS(ws);
         }
@@ -27,9 +33,9 @@ export const RoomCanvas = ({ roomId } : { roomId: string }) => {
             }
             ws.close();
         }
-    }, [roomId])
+    }, [roomId, mounted])
 
-    if (!WS) {
+    if (!mounted || !WS) {
         return <div>
             connecting to server...
         </div>

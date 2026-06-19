@@ -25,6 +25,7 @@
   "dependencies": {
     "dotenv": "^17.2.3",
     "jsonwebtoken": "^9.0.2",
+    "redis": "^6.0.0",
     "ws": "^8.18.3"
   }
 }

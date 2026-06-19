@@ -14,16 +14,17 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  firstName String
-  lastName  String
-  email     String   @unique
-  password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  rooms     Room[]
-  chats     Chat[]
-  shapes    Shapes[]
+  id         String   @id @default(uuid())
+  firstName  String
+  lastName   String
+  email      String   @unique
+  password   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  rooms      Room[]   @relation("RoomMembers")
+  adminRooms Room[]   @relation("RoomAdmin")
+  chats      Chat[]
+  shapes     Shapes[]
 }
 
 model Room {
@@ -31,8 +32,8 @@ model Room {
   slug      Int      @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  adminId   String
-  admin     User     @relation(fields: [adminId], references: [id])
+  users     User[]   @relation("RoomMembers")
+  admin     User[]   @relation("RoomAdmin")
   chats     Chat[]
   Shapes    Shapes[]
 }

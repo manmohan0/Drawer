@@ -737,7 +737,7 @@ export class Game {
 
     const width = currentX - this.startX;
     const height = currentY - this.startY;
-
+    console.log(this.myUserId)
     if (!this.myUserId) {
       console.error("No user ID found");
       return;
@@ -793,7 +793,7 @@ export class Game {
     } else {
       return; // Pointer or other tools don't create new shapes
     }
-
+    console.log(this.users)
     // Broadcast the newly created shape details via WebSocket
     this.ws.send(
       JSON.stringify({
@@ -1265,10 +1265,11 @@ export class Game {
   initHandlers = () => {
     this.ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
-
+      
       if (data.type == "joined_room") {
+        console.log(data)
         this.users = data.curRoomUsers;
-        this.myUserId = data.myUserId
+        this.myUserId = data.myUserId;
       }
 
       // Remote user created a shape

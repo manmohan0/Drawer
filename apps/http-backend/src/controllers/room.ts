@@ -17,13 +17,73 @@ export const createRoom = async (req: Request, res: Response) => {
     const newRoom = await prismaClient.room.create({
       data: {
         slug: Number(parsedBody.data.slug),
-        adminId: req.userId as string,
+        admin: {
+          connect: {
+            id: req.userId as string,
+          },
+        },
       },
     });
     res.status(201).json({ message: "Room created successfully", roomId: newRoom.id });
   } catch (e) {
+    console.log(e)
     res.status(411).json({ message: "Room with that slug already exists" });
     return;
+  }
+};
+
+export const joinRoom = async (req: Request, res: Response) => {
+  const parsedBody = roomSchema.safeParse(req.body);
+
+  if (parsedBody.error) {
+    res.status(411).json({
+      message: "Invalid inputs",
+      error: parsedBody.error,
+    });
+    return;
+  }
+
+  try {
+    const slugNum = Number(parsedBody.data.slug);
+    const room = await prismaClient.room.findUnique({
+      where: {
+        slug: slugNum,
+      },
+      include: {
+        users: {
+          where: {
+            id: req.userId as string,
+          },
+        },
+      },
+    });
+
+    if (!room) {
+      res.status(404).json({ message: "Room not found" });
+      return;
+    }
+
+    if (room.users.length > 0) {
+      res.status(200).json({ message: "User already in room", roomId: room.id });
+      return;
+    }
+
+    const updatedRoom = await prismaClient.room.update({
+      where: {
+        id: room.id,
+      },
+      data: {
+        users: {
+          connect: {
+            id: req.userId as string,
+          },
+        },
+      },
+    });
+    res.status(200).json({ success: true, message: "Joined room successfully", slug: updatedRoom.slug });
+  } catch (e) {
+    console.error("Failed to join room:", e);
+    res.status(500).json({ success: false, message: "Failed to join room" });
   }
 };
 

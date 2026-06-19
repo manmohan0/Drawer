@@ -19,6 +19,7 @@ const checkUser = (token: string): JwtPayload | null => {
 
     return decoded;
   } catch (err) {
+    console.error("checkUser: JWT verification failed:", err);
     return null;
   }
 };
@@ -34,17 +35,17 @@ interface User {
 const users: User[] = [];
 
 wss.on("connection", async (ws, req) => {
-  const url = req.url;
-
-  if (!url) {
-    return;
-  }
+  const messageQueue: any[] = [];
+  const bufferListener = (message: any) => {
+    messageQueue.push(message);
+  };
+  ws.on("message", bufferListener);
 
   const token = req.headers.cookie?.split('Authorization=')[1]?.split(';')[0];
 
   if (!token) {
-    console.error("No token found in cookies");
-    ws.send(JSON.stringify({ type: "error", message: "No authorization cookie found" }));
+    console.error("No token found in cookies or query parameters");
+    ws.send(JSON.stringify({ type: "error", message: "No authorization token found" }));
     ws.close();
     return;
   }
@@ -52,38 +53,44 @@ wss.on("connection", async (ws, req) => {
   const userAuthenticated = checkUser(token);
 
   if (!userAuthenticated || !userAuthenticated.userId) {
+    console.error("Connection rejected: Invalid token authentication", { userAuthenticated });
+    ws.close();
+    return;
+  }
+
+  let dbUser = null;
+
+  try {
+    dbUser = await prismaClient.user.findUnique({
+      where: { id: userAuthenticated.userId }
+    });
+  } catch (e) {
+    console.error("Failed to query user details:", e);
+  }
+
+  if (!dbUser) {
+    console.error("Connection rejected: User not found in DB for ID:", userAuthenticated.userId);
+    ws.send(JSON.stringify({ type: "error", message: "User not found" }));
     ws.close();
     return;
   }
 
   const userObj: User = {
     userId: userAuthenticated.userId,
-    firstName: "",
-    lastName: "",
+    firstName: dbUser.firstName,
+    lastName: dbUser.lastName,
     ws,
     rooms: [],
   };
   users.push(userObj);
 
-  prismaClient.user.findUnique({
-    where: { id: userAuthenticated.userId }
-  }).then((dbUser) => {
-    if (dbUser) {
-      userObj.firstName = dbUser.firstName;
-      userObj.lastName = dbUser.lastName;
-    } else {
-      ws.send(JSON.stringify({ type: "error", message: "User not found" }));
-      ws.close();
-      const idx = users.indexOf(userObj);
-      if (idx !== -1) users.splice(idx, 1);
-    }
-  }).catch((e) => {
-    console.error("Failed to query user details:", e);
-  });
+  console.log("Working")
 
-  ws.on("message", async (message) => {
+  ws.removeListener("message", bufferListener);
+
+  const messageHandler = async (message: any) => {
     const data = JSON.parse(message.toString());
-    
+    console.log(data)
     if (data.type === "join_room") {
       const user = users.find((u) => u.ws === ws);
       if (user && !user.rooms.includes(data.roomId)) {
@@ -91,8 +98,77 @@ wss.on("connection", async (ws, req) => {
       }
 
       const curRoomUsers: Record<string, { firstName: string; lastName: string }> = {};
+
+      try {
+        const slugNum = Number(data.roomId);
+        if (!isNaN(slugNum)) {
+          const roomUsers = await prismaClient.user.findMany({
+            where: {
+              OR: [
+                {
+                  rooms: {
+                    some: {
+                      slug: slugNum,
+                    },
+                  },
+                },
+                {
+                  adminRooms: {
+                    some: {
+                      slug: slugNum,
+                    },
+                  },
+                },
+              ],
+            },
+          });
+
+          roomUsers.forEach((u) => {
+            curRoomUsers[u.id] = {
+              firstName: u.firstName,
+              lastName: u.lastName,
+            };
+          });
+        }
+      } catch (e) {
+        console.error("Failed to query room users from DB:", e);
+        // Fallback to active in-memory users
+        users
+          .filter((u) => u.rooms.includes(data.roomId))
+          .forEach((u) => {
+            curRoomUsers[u.userId] = {
+              firstName: u.firstName,
+              lastName: u.lastName,
+            };
+          });
+      }
+      // Broadcast updated user list to all users in the room
+      users.forEach((u) => {
+        if (u.rooms.includes(data.roomId)) {
+          u.ws.send(
+            JSON.stringify({
+              type: "joined_room",
+              room: data.roomId,
+              curRoomUsers,
+              myUserId: u.userId,
+            })
+          );
+        }
+      });
+    }
+
+    if (data.type === "leave_room") {
+      const user = users.find((u) => u.ws === ws);
+      const roomId = data.room;
+      if (user) {
+        user.rooms = user.rooms.filter((r) => r !== roomId);
+      }
+      ws.send(JSON.stringify({ type: "left_room", room: roomId }));
+
+      // Broadcast updated user list to remaining users in the room
+      const curRoomUsers: Record<string, { firstName: string; lastName: string }> = {};
       users
-        .filter((u) => u.rooms.includes(data.roomId))
+        .filter((u) => u.rooms.includes(roomId))
         .forEach((u) => {
           curRoomUsers[u.userId] = {
             firstName: u.firstName,
@@ -100,16 +176,20 @@ wss.on("connection", async (ws, req) => {
           };
         });
 
-      const myUserId = userAuthenticated.userId;
-      ws.send(JSON.stringify({ type: "joined_room", room: data.roomId, curRoomUsers, myUserId }));
-    }
+      console.log("Updated room users on leave:", curRoomUsers);
 
-    if (data.type === "leave_room") {
-      const user = users.find((u) => u.ws === ws);
-      if (user) {
-        user.rooms = user.rooms.filter((r) => r !== data.room);
-      }
-      ws.send(JSON.stringify({ type: "left_room", room: data.room }));
+      users.forEach((u) => {
+        if (u.rooms.includes(roomId)) {
+          u.ws.send(
+            JSON.stringify({
+              type: "joined_room",
+              room: roomId,
+              curRoomUsers,
+              myUserId: u.userId,
+            })
+          );
+        }
+      });
     }
 
     if (data.type === "chat") {
@@ -281,6 +361,22 @@ wss.on("connection", async (ws, req) => {
       } catch (e) {
         console.error("Failed to delete the shape:", e);
       }
+    }
+  };
+
+  ws.on("message", messageHandler);
+
+  for (const message of messageQueue) {
+    messageHandler(message).catch((err) => {
+      console.error("Error processing buffered message:", err);
+    });
+  }
+
+  ws.on("close", () => {
+    console.log("Connection closed");
+    const userIndex = users.findIndex((u) => u.ws === ws);
+    if (userIndex !== -1) {
+      users.splice(userIndex, 1);
     }
   });
 });

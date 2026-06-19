@@ -80,24 +80,20 @@ export default function Home() {
     }
 
     try {
-      const res = await axios.get(`${BACKEND_URL}/room/${joinSlug}`, {
-        headers: {
-          Authorization: token || "",
-        },
-        withCredentials: true,
-      });
+      const res = await axios.post(`${BACKEND_URL}/room/joinRoom`, { slug: Number(joinSlug) }, { withCredentials: true });
 
-      if (res && res.data.type === "error" && res.data.message === "No authorization cookie found") {
+      if (res && !res.data.success) {
         router.push("/signin")
-        setError("No authorization cookie found");
         setLoading(false);
         return;
       }
 
-      setSuccess("Room found! Joining...");
-      setTimeout(() => {
-        router.push(`/canvas/${res.data.room.slug}`);
-      }, 1500);
+      if (res && res.data.success) {
+        setSuccess("Room found! Joining...");
+        setTimeout(() => {
+          router.push(`/canvas/${res.data.slug}`);
+        }, 1500);
+      }
     } catch (err: any) {
       console.error(err);
       setError(
