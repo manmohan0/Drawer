@@ -14,7 +14,6 @@ export const RoomCanvas = ({ roomId } : { roomId: string }) => {
 
     useEffect(() => {
         if (!mounted) return;
-        const token = getCookie("Authorization") || "";
         const ws = new WebSocket(`${WS_URL}`);
         ws.onopen = () => {
             setWS(ws);
