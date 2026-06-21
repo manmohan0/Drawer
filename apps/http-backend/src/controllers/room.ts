@@ -2,6 +2,50 @@ import { roomSchema } from "@repo/common/types";
 import { prismaClient } from "@repo/db/db";
 import { Request, Response } from "express";
 
+export const getMyRooms = async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    const myRooms = await prismaClient.room.findMany({
+      where: {
+        OR: [
+          {
+            admin: {
+              some: {
+                id: userId,
+              },
+            },
+          },
+          {
+            users: {
+              some: {
+                id: userId,
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        admin: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+    res.status(200).json({ success: true, rooms: myRooms });
+  } catch (e) {
+    console.error("Failed to fetch my rooms:", e);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const createRoom = async (req: Request, res: Response) => {
   const parsedBody = roomSchema.safeParse(req.body);
 
@@ -111,8 +155,18 @@ export const getChatsBySlug = async (req: Request, res: Response) => {
 
   try {
     const room = await prismaClient.room.findFirst({
-      where: { slug: Number(slug) }
-    })
+      where: { slug: Number(slug) },
+      include: {
+        admin: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
     if (!room) {
       res.status(404).json({ message: "Room not found" });
       return;

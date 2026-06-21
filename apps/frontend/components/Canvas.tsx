@@ -2,11 +2,85 @@ import { BACKEND_URL } from "@/config";
 import { Game } from "@/Draw/Game";
 import { Shape, ShapeType } from "@/types";
 import axios from "axios";
-import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2, PaintBucket, ArrowUp, ArrowDown, Type } from "lucide-react";
+import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2, PaintBucket, ArrowUp, ArrowDown, Type, LogOut, ChevronDown, Folder } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getCookie, deleteCookie } from "@/utils/cookie";
 
 export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [myRooms, setMyRooms] = useState<any[]>([]);
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [currentRoom, setCurrentRoom] = useState<any | null>(null);
+  const [myUserName, setMyUserName] = useState<string>("Account");
+
+  const fetchRooms = async () => {
+    setRoomsLoading(true);
+    try {
+      const token = getCookie("Authorization");
+      const res = await axios.get(`${BACKEND_URL}/room/myRooms`, {
+        headers: {
+          Authorization: token,
+        },
+        withCredentials: true,
+      });
+      if (res.data && res.data.rooms) {
+        setMyRooms(res.data.rooms);
+      }
+    } catch (err) {
+      console.error("Failed to fetch rooms:", err);
+    } finally {
+      setRoomsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isDropdownOpen) {
+      fetchRooms();
+    }
+  }, [isDropdownOpen]);
+
+  useEffect(() => {
+    const fetchCurrentRoom = async () => {
+      try {
+        const token = getCookie("Authorization");
+        const res = await axios.get(`${BACKEND_URL}/room/${roomId}`, {
+          headers: {
+            Authorization: token,
+          },
+          withCredentials: true,
+        });
+        if (res.data && res.data.room) {
+          console.log(res.data)
+          setCurrentRoom(res.data.room);
+        }
+      } catch (err) {
+        console.error("Failed to fetch current room details:", err);
+      }
+    };
+    fetchCurrentRoom();
+  }, [roomId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const handleLogout = () => {
+    deleteCookie("Authorization");
+    router.push("/signin");
+  };
+
   const [game, setGame] = useState<Game>();
   const [tool, setTool] = useState<ShapeType>("rect");
   const [selectedShape, setSelectedShape] = useState<Shape | null>(null);
@@ -95,6 +169,13 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       const game = new Game(canvas, roomId, ws, (shape) => {
         setSelectedShape(shape);
       });
+      
+      game.onRoomJoined = (myUserId, users) => {
+        const user = users[myUserId];
+        if (user) {
+          setMyUserName(`${user.firstName} ${user.lastName}`.trim());
+        }
+      };
       
       game.onStartTextEdit = (x, y, text, fontSize, onSave, onCancel) => {
         setTextEditState({
@@ -237,9 +318,9 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   };
 
   const details = getShapeDetails();
-  const creatorName = selectedShape && selectedShape.type !== "pointer" ? game?.getUserName(selectedShape.userId) : null;
-  const updaterName = selectedShape && selectedShape.type !== "pointer" ? game?.getUserName(selectedShape.updatedByUserId) : null;
-  const shapeId = selectedShape && selectedShape.type !== "pointer" ? selectedShape.id : null;
+  const creatorName = selectedShape ? game?.getUserName(selectedShape.userId) : null;
+  const updaterName = selectedShape ? game?.getUserName(selectedShape.updatedByUserId) : null;
+  const shapeId = selectedShape ? selectedShape.id : null;
 
   return (
     <div className="relative overflow-hidden w-screen h-screen">
@@ -454,6 +535,133 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
         >
           Clear
         </div>
+      </div>
+
+      {/* Profile menu */}
+      <div className="absolute top-4 right-4 z-50" ref={dropdownRef}>
+        <button
+          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          className="flex items-center space-x-2 bg-white/80 backdrop-blur-md border border-gray-200/50 hover:bg-white hover:border-gray-300 shadow-lg hover:shadow-xl rounded-full p-1.5 pr-3 transition-all duration-200 cursor-pointer active:scale-95 group"
+        >
+          <div className="w-8 h-8 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 flex items-center justify-center text-white shadow-inner">
+            <User className="w-4 h-4" />
+          </div>
+          <span className="text-xs font-semibold text-gray-700 select-none">{myUserName}</span>
+          <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
+        </button>
+
+        {isDropdownOpen && (
+          <div className="absolute right-0 mt-2 w-72 bg-white/95 backdrop-blur-md border border-gray-200/50 shadow-2xl rounded-2xl overflow-hidden transition-all duration-200 animate-in fade-in slide-in-from-top-2 origin-top-right">
+            {/* Header */}
+            <div className="px-4 py-3 bg-gray-50/50 border-b border-gray-100">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Drawer Session</span>
+            </div>
+
+            {/* Current Room Details */}
+            {currentRoom && (
+              <div className="px-4 py-3 border-b border-gray-100 bg-orange-50/20 space-y-2">
+                <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wider block">
+                  Current Room Details
+                </span>
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                  <div className="flex flex-col bg-white p-2 rounded-lg border border-orange-100/50 shadow-sm col-span-2">
+                    <span className="text-[9px] uppercase font-bold text-gray-400">Room Code</span>
+                    <span className="font-mono font-bold text-gray-800 text-sm mt-0.5">{currentRoom.slug}</span>
+                  </div>
+                  <div className="flex flex-col bg-white p-2 rounded-lg border border-orange-100/50 shadow-sm">
+                    <span className="text-[9px] uppercase font-bold text-gray-400">Admin</span>
+                    <span className="font-medium text-gray-800 mt-0.5 truncate" title={currentRoom.admin?.map((a: any) => `${a.firstName} ${a.lastName}`).join(", ") || "None"}>
+                      {currentRoom.admin?.[0] ? `${currentRoom.admin[0].firstName} ${currentRoom.admin[0].lastName}` : "Unknown"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col bg-white p-2 rounded-lg border border-orange-100/50 shadow-sm">
+                    <span className="text-[9px] uppercase font-bold text-gray-400">Created On</span>
+                    <span className="font-medium text-gray-800 mt-0.5">
+                      {new Date(currentRoom.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Content */}
+            <div className="p-4 space-y-4">
+              {/* Navigate to All Rooms Page */}
+              <button
+                type="button"
+                onClick={() => {
+                  router.push("/rooms");
+                  setIsDropdownOpen(false);
+                }}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-md shadow-orange-500/10 cursor-pointer"
+              >
+                <Folder className="w-3.5 h-3.5" />
+                <span>Go to My Rooms Page</span>
+              </button>
+
+              {/* Rooms List */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center">
+                  <Folder className="w-3.5 h-3.5 mr-1 text-gray-400" />
+                  My Rooms
+                </span>
+                
+                {roomsLoading ? (
+                  <div className="flex items-center justify-center py-6 text-gray-400 space-x-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
+                    <span className="text-xs">Loading rooms...</span>
+                  </div>
+                ) : myRooms.length === 0 ? (
+                  <div className="text-center py-4 text-xs text-gray-400 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                    No rooms joined yet.
+                  </div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-1 pr-1 scrollbar-thin">
+                    {myRooms.map((room) => {
+                      const isCurrent = String(room.slug) === String(roomId);
+                      return (
+                        <button
+                          key={room.id}
+                          type="button"
+                          onClick={() => {
+                            if (!isCurrent) {
+                              router.push(`/canvas/${room.slug}`);
+                            }
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            isCurrent
+                              ? "bg-orange-50 border-orange-200 text-orange-700 font-semibold"
+                              : "bg-white hover:bg-gray-50 border-gray-100 hover:border-gray-200 text-gray-600 hover:text-gray-900"
+                          }`}
+                        >
+                          <span className="text-xs font-mono">Room Code: {room.slug}</span>
+                          {isCurrent && (
+                            <span className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold uppercase">
+                              Active
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="pt-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-red-50 hover:bg-red-100 border border-red-100 hover:border-red-200 text-red-600 hover:text-red-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* AI Preview Controls & Error Messages */}

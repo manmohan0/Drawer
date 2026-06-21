@@ -54,11 +54,12 @@ export type Shape = {
     zIndex?: number;
     userId?: string;
     updatedByUserId?: string;
-} | {
-    type: 'pointer',
-    x: number,
-    y: number,
 }
+//  | {
+//     type: 'pointer',
+//     x: number,
+//     y: number,
+// }
 
 export type selector = {
     id: number;

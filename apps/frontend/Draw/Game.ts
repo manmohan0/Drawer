@@ -54,6 +54,7 @@ export class Game {
   private onSelectionChange?: (shape: Shape | null) => void;
   public editingTextShapeId: number | undefined;
   public onStartTextEdit?: (x: number, y: number, text: string, fontSize: number, onSave: (val: string) => void, onCancel: () => void) => void;
+  public onRoomJoined?: (myUserId: string, users: Record<string, { firstName: string; lastName: string }>) => void;
 
   /**
    * Initializes the Game whiteboard session.
@@ -168,7 +169,6 @@ export class Game {
    * Checks if two shapes overlap based on their bounding boxes.
    */
   private checkOverlap = (shapeA: Shape, shapeB: Shape) => {
-    if (shapeA.type === "pointer" || shapeB.type === "pointer") return false;
     const boxA = this.getShapeBoundingBox(shapeA);
     const boxB = this.getShapeBoundingBox(shapeB);
     return boxA.x1 < boxB.x2 && boxA.x2 > boxB.x1 && boxA.y1 < boxB.y2 && boxA.y2 > boxB.y1;
@@ -179,8 +179,8 @@ export class Game {
    */
   private updateTwoShapes = (shape1: Shape, shape2: Shape) => {
     let changed = false;
-    if (shape1.type !== "pointer" && shape1.id) {
-      const idx = this.existingShapes.findIndex((s) => s.type !== "pointer" && s.id === shape1.id);
+    if (shape1.id) {
+      const idx = this.existingShapes.findIndex((s) => s.id === shape1.id);
       if (idx !== -1) {
         this.existingShapes[idx] = shape1;
         this.ws.send(
@@ -194,8 +194,8 @@ export class Game {
         changed = true;
       }
     }
-    if (shape2.type !== "pointer" && shape2.id) {
-      const idx = this.existingShapes.findIndex((s) => s.type !== "pointer" && s.id === shape2.id);
+    if (shape2.id) {
+      const idx = this.existingShapes.findIndex((s) => s.id === shape2.id);
       if (idx !== -1) {
         this.existingShapes[idx] = shape2;
         this.ws.send(
@@ -211,12 +211,12 @@ export class Game {
     }
     if (changed) {
       this.existingShapes.sort((a, b) => {
-        const zA = a.type !== "pointer" ? (a.zIndex || 0) : 0;
-        const zB = b.type !== "pointer" ? (b.zIndex || 0) : 0;
+        const zA = (a.zIndex || 0);
+        const zB = (b.zIndex || 0);
         return zA - zB;
       });
-      if (this.selectedShape && this.selectedShape.type !== "pointer") {
-        const found = this.existingShapes.find((s) => s.type !== "pointer" && this.selectedShape?.type !== "pointer" && s.id === this.selectedShape?.id);
+      if (this.selectedShape) {
+        const found = this.existingShapes.find((s) => s.id === this.selectedShape?.id);
         if (found) {
           this.selectedShape = found;
           this.updateSelectors(found);
@@ -231,14 +231,11 @@ export class Game {
    * Brings the selected shape forward by one position among overlapping shapes.
    */
   bringForward = () => {
-    if (!this.selectedShape || this.selectedShape.type === "pointer") return;
+    if (!this.selectedShape) return;
 
     // Get all non-pointer shapes that overlap with the selected shape, including itself
     const overlapping = this.existingShapes.filter(
-      (s) =>
-        s.type !== "pointer" && this.selectedShape?.type !== "pointer" &&
-        (s.id === this.selectedShape?.id ||
-          (this.selectedShape && this.checkOverlap(this.selectedShape, s)))
+      (s) => (s.id === this.selectedShape?.id || (this.selectedShape && this.checkOverlap(this.selectedShape, s)))
     );
 
     if (overlapping.length <= 1) {
@@ -246,7 +243,7 @@ export class Game {
       return;
     }
 
-    const selectedIdx = overlapping.findIndex((s) => s.type !== "pointer" && this.selectedShape?.type !== "pointer" && s.id === this.selectedShape?.id);
+    const selectedIdx = overlapping.findIndex((s) => s.id === this.selectedShape?.id);
     if (selectedIdx === -1 || selectedIdx === overlapping.length - 1) {
       console.log("Selected shape is already at the front of overlapping shapes.");
       return;
@@ -254,7 +251,7 @@ export class Game {
 
     const nextShape = overlapping[selectedIdx + 1];
     const curZ = this.selectedShape.zIndex || 0;
-    const nextZ = nextShape.type !== "pointer" && nextShape.zIndex || 0;
+    const nextZ = nextShape.zIndex || 0;
 
     let updatedSelected: Shape;
     let updatedNext: Shape;
@@ -274,13 +271,11 @@ export class Game {
    * Sends the selected shape backward by one position among overlapping shapes.
    */
   sendBackward = () => {
-    if (!this.selectedShape || this.selectedShape.type === "pointer") return;
+    if (!this.selectedShape) return;
 
     // Get all non-pointer shapes that overlap with the selected shape, including itself
     const overlapping = this.existingShapes.filter(
-      (s) =>
-        s.type !== "pointer" && this.selectedShape?.type !== "pointer" &&
-        (s.id === this.selectedShape?.id ||
+      (s) => (s.id === this.selectedShape?.id ||
           (this.selectedShape && this.checkOverlap(this.selectedShape, s)))
     );
 
@@ -289,7 +284,7 @@ export class Game {
       return;
     }
 
-    const selectedIdx = overlapping.findIndex((s) => s.type !== "pointer" && this.selectedShape?.type !== "pointer" && s.id === this.selectedShape?.id);
+    const selectedIdx = overlapping.findIndex((s) => s.id === this.selectedShape?.id);
     if (selectedIdx === -1 || selectedIdx === 0) {
       console.log("Selected shape is already at the back of overlapping shapes.");
       return;
@@ -297,7 +292,7 @@ export class Game {
 
     const prevShape = overlapping[selectedIdx - 1];
     const curZ = this.selectedShape.zIndex || 0;
-    const prevZ = prevShape.type !== "pointer" && prevShape.zIndex || 0;
+    const prevZ = prevShape.zIndex || 0;
 
     let updatedSelected: Shape;
     let updatedPrev: Shape;
@@ -700,7 +695,7 @@ export class Game {
       this.isClicked = false;
 
       let shapeId: number = -1;
-      if (this.selectedShape?.type != "pointer" && this.selectedShape?.id) {
+      if (this.selectedShape?.id) {
         shapeId = this.selectedShape?.id;
       }
 
@@ -717,7 +712,7 @@ export class Game {
         this.updateSelectors(rect);
       }
 
-      if (this.selectedShape && this.selectedShape.type !== "pointer") {
+      if (this.selectedShape) {
         this.selectedShape.updatedByUserId = this.myUserId || undefined;
       }
 
@@ -743,7 +738,7 @@ export class Game {
 
     const width = currentX - this.startX;
     const height = currentY - this.startY;
-    console.log(this.myUserId)
+    
     if (!this.myUserId) {
       console.error("No user ID found");
       return;
@@ -799,7 +794,6 @@ export class Game {
     } else {
       return; // Pointer or other tools don't create new shapes
     }
-    console.log(this.users)
     // Broadcast the newly created shape details via WebSocket
     this.ws.send(
       JSON.stringify({
@@ -1050,9 +1044,9 @@ export class Game {
   };
 
   updateShape = (updatedShape: Shape) => {
-    if (updatedShape.type !== "pointer" && updatedShape.id) {
+    if (updatedShape.id) {
       updatedShape.updatedByUserId = this.myUserId || undefined;
-      const shapeIndex = this.existingShapes.findIndex((s) => s.type !== "pointer" && s.id === updatedShape.id);
+      const shapeIndex = this.existingShapes.findIndex((s) => s.id === updatedShape.id);
       if (shapeIndex !== -1) {
         this.existingShapes[shapeIndex] = updatedShape;
         this.selectedShape = updatedShape;
@@ -1073,7 +1067,7 @@ export class Game {
   };
 
   deleteSelectedShape = () => {
-    if (!this.selectedShape || this.selectedShape.type === "pointer") return;
+    if (!this.selectedShape) return;
     this.ws.send(
       JSON.stringify({
         type: "delete_shape",
@@ -1275,9 +1269,9 @@ export class Game {
       const data = JSON.parse(e.data);
       
       if (data.type == "joined_room") {
-        console.log(data)
         this.users = data.curRoomUsers;
         this.myUserId = data.myUserId;
+        this.onRoomJoined?.(data.myUserId, data.curRoomUsers);
       }
 
       // Remote user created a shape
@@ -1290,33 +1284,32 @@ export class Game {
         };
 
         this.existingShapes.push(shape);
-        this.existingShapes.sort((a, b) => (a.type !== "pointer" && a.zIndex || 0) - (b.type !== "pointer" && b.zIndex || 0));
+        this.existingShapes.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
         this.clearCanvas();
       }
 
       // Remote user modified a shape
       if (data.type === "shape_updated") {
         const shape = this.existingShapes.find(
-          (s) => s.type != "pointer" && s.id === data.shape.id
+          (s) => s.id === data.shape.id
         );
         if (shape) {
           const updatedShape = JSON.parse(data.shape.shape);
           Object.assign(shape, updatedShape);
           shape.updatedByUserId = data.shape.updatedByUserId;
-          console.log("shape updated", updatedShape)
-          this.existingShapes.sort((a, b) => (a.type !== "pointer" && a.zIndex || 0) - (b.type !== "pointer" && b.zIndex || 0));
+          this.existingShapes.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
           this.clearCanvas();
-          if (this.selectedShape && this.selectedShape.type !== "pointer" && this.selectedShape.id === data.shape.id) {
+          if (this.selectedShape && this.selectedShape.id === data.shape.id) {
             this.triggerSelectionChange();
           }
         }
       }
 
       if (data.type === "shape_deleted") {
-        const shape = this.existingShapes.find((s) => s.type !== "pointer" && s.id === data.shapeId);
+        const shape = this.existingShapes.find((s) => s.id === data.shapeId);
         if (shape) {
-          this.existingShapes = this.existingShapes.filter((s) => s.type !== "pointer" && s.id !== data.shapeId);
-          if (this.selectedShape && this.selectedShape.type !== "pointer" && this.selectedShape.id === data.shapeId) {
+          this.existingShapes = this.existingShapes.filter((s) => s.id !== data.shapeId);
+          if (this.selectedShape && this.selectedShape.id === data.shapeId) {
             this.selectedShape = null;
             this.shapeSelectors = [];
             this.triggerSelectionChange();
@@ -1501,7 +1494,7 @@ export class Game {
     // 3. Render all existing shapes loaded in memory
     if (this.existingShapes.length > 0) {
       this.existingShapes.forEach((shape) => {
-        if (shape.type !== "pointer" && shape.id !== undefined && shape.id === this.editingTextShapeId) return;
+        if (shape.id !== undefined && shape.id === this.editingTextShapeId) return;
         this.ctx.save();
         if (shape.type === "rect") {
           if (shape.color) {
