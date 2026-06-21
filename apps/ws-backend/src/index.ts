@@ -14,7 +14,8 @@ interface JwtPayload {
   // Add other properties if they exist in your JWT payload
 }
 
-const wss = new WebSocketServer({ port: 8081 });
+const port = process.env.PORT || 8200;
+const wss = new WebSocketServer({ port: Number(port) });
 
 const checkUser = (token: string): JwtPayload | null => {
   try {
@@ -28,74 +29,120 @@ const checkUser = (token: string): JwtPayload | null => {
 };
 
 wss.on("connection", async (ws, req) => {
-  const messageQueue: any[] = [];
-  const bufferListener = (message: any) => {
-    messageQueue.push(message);
+  let isAuthenticated = false;
+  let userObj: User | null = null;
+  let authUserId: string | null = null;
+
+  // Queue to buffer messages that arrive before authentication completes
+  const tempMessageQueue: any[] = [];
+
+  // Check if token exists in cookies for immediate authentication
+  const cookieToken = req.headers.cookie?.split('Authorization=')[1]?.split(';')[0];
+  
+  const setupAuthenticatedUser = async (token: string): Promise<boolean> => {
+    const userAuthenticated = checkUser(token);
+    if (!userAuthenticated || !userAuthenticated.userId) {
+      return false;
+    }
+
+    try {
+      const dbUser = await prismaClient.user.findUnique({
+        where: { id: userAuthenticated.userId }
+      });
+
+      if (!dbUser) {
+        return false;
+      }
+
+      authUserId = userAuthenticated.userId;
+      userObj = {
+        userId: userAuthenticated.userId,
+        firstName: dbUser.firstName,
+        lastName: dbUser.lastName,
+        ws,
+        rooms: [],
+      };
+      users.push(userObj);
+      isAuthenticated = true;
+
+      // Send auth success notification to client
+      ws.send(JSON.stringify({ type: "authenticated" }));
+
+      // Attach drawing handlers
+      ws.on("message", (message) => {
+        selfMessageHandler(message, ws, authUserId!).catch((err) => {
+          console.error("Error processing message:", err);
+        });
+      });
+
+      // Play back any messages that arrived during the auth phase
+      for (const message of tempMessageQueue) {
+        selfMessageHandler(message, ws, authUserId!).catch((err) => {
+          console.error("Error processing buffered message:", err);
+        });
+      }
+
+      return true;
+    } catch (e) {
+      console.error("Database lookup during authentication failed:", e);
+      return false;
+    }
   };
-  ws.on("message", bufferListener);
 
-  const token = req.headers.cookie?.split('Authorization=')[1]?.split(';')[0];
-
-  if (!token) {
-    console.error("No token found in cookies or query parameters");
-    ws.send(JSON.stringify({ type: "error", message: "No authorization token found" }));
-    ws.close();
-    return;
+  // Immediate authentication using handshake cookie if available
+  if (cookieToken) {
+    const success = await setupAuthenticatedUser(cookieToken);
+    if (success) {
+      console.log("Handshake cookie authentication successful");
+    }
   }
 
-  const userAuthenticated = checkUser(token);
+  let authTimeout: any = null;
 
-  if (!userAuthenticated || !userAuthenticated.userId) {
-    console.error("Connection rejected: Invalid token authentication", { userAuthenticated });
-    ws.close();
-    return;
-  }
+  // Fallback to message-based authentication if not authenticated by cookie
+  if (!isAuthenticated) {
+    // Terminate connection if authentication message is not received within 5 seconds
+    authTimeout = setTimeout(() => {
+      if (!isAuthenticated) {
+        console.error("Authentication timeout: closing WebSocket connection");
+        ws.send(JSON.stringify({ type: "error", message: "Authentication timeout" }));
+        ws.close();
+      }
+    }, 5000);
 
-  let dbUser = null;
+    const handleAuthMessage = async (message: any) => {
+      try {
+        const data = JSON.parse(message.toString());
+        if (data.type === "auth") {
+          const success = await setupAuthenticatedUser(data.token);
+          if (success) {
+            if (authTimeout) clearTimeout(authTimeout);
+            ws.removeListener("message", handleAuthMessage);
+            console.log("Post-handshake message authentication successful");
+          } else {
+            ws.send(JSON.stringify({ type: "error", message: "Invalid authorization token" }));
+            ws.close();
+          }
+        } else {
+          // Buffer messages (like join_room) that arrive before auth is finished
+          tempMessageQueue.push(message);
+        }
+      } catch (err) {
+        console.error("Error parsing pre-authentication message:", err);
+        ws.send(JSON.stringify({ type: "error", message: "Invalid message format" }));
+        ws.close();
+      }
+    };
 
-  try {
-    dbUser = await prismaClient.user.findUnique({
-      where: { id: userAuthenticated.userId }
-    });
-  } catch (e) {
-    console.error("Failed to query user details:", e);
-  }
-
-  if (!dbUser) {
-    console.error("Connection rejected: User not found in DB for ID:", userAuthenticated.userId);
-    ws.send(JSON.stringify({ type: "error", message: "User not found" }));
-    ws.close();
-    return;
-  }
-
-  const userObj: User = {
-    userId: userAuthenticated.userId,
-    firstName: dbUser.firstName,
-    lastName: dbUser.lastName,
-    ws,
-    rooms: [],
-  };
-  users.push(userObj);
-
-  ws.removeListener("message", bufferListener);
-
-  ws.on("message", (message) => {
-    selfMessageHandler(message, ws, userAuthenticated.userId).catch((err) => {
-      console.error("Error processing message:", err);
-    });
-  });
-
-  for (const message of messageQueue) {
-    selfMessageHandler(message, ws, userAuthenticated.userId).catch((err) => {
-      console.error("Error processing buffered message:", err);
-    });
+    ws.on("message", handleAuthMessage);
   }
 
   ws.on("close", () => {
+    if (authTimeout) clearTimeout(authTimeout);
     console.log("Connection closed");
     const userIndex = users.findIndex((u) => u.ws === ws);
     if (userIndex !== -1) {
-      const user = users[userIndex]
+      const user = users[userIndex];
 
       user?.rooms.forEach(room => {
         const roomKey = `room${room}`

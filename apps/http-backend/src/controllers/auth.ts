@@ -79,7 +79,7 @@ export const signIn = async (req: Request, res: Response) => {
   res.cookie("Authorization", authToken, {
     httpOnly: false,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
   });
 

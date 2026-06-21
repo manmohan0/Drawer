@@ -21,6 +21,8 @@ app.use('/auth', authRouter);
 app.use('/room', roomRouter);
 app.use('/ai', aiRouter);
 
-app.listen(3001, async () => {
-  console.log("HTTP Backend is running on http://localhost:3001")
+const port = process.env.PORT || 3010
+
+app.listen(port, async () => {
+  console.log("HTTP Backend is running on http://localhost:" + port)
 })

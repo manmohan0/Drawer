@@ -238,6 +238,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
 
   const details = getShapeDetails();
   const creatorName = selectedShape && selectedShape.type !== "pointer" ? game?.getUserName(selectedShape.userId) : null;
+  const updaterName = selectedShape && selectedShape.type !== "pointer" ? game?.getUserName(selectedShape.updatedByUserId) : null;
   const shapeId = selectedShape && selectedShape.type !== "pointer" ? selectedShape.id : null;
 
   return (
@@ -359,19 +360,34 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               </div>
             )}
 
-            {/* Creator info */}
-            <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
-              <div className="flex items-center text-gray-500 space-x-1.5">
-                <User className="w-3.5 h-3.5 text-gray-400" />
-                <span>Created by:</span>
+            {/* Creator & Updater info */}
+            <div className="pt-3 border-t border-gray-100 flex flex-col gap-2 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center text-gray-500 space-x-1.5">
+                  <User className="w-3.5 h-3.5 text-gray-400" />
+                  <span>Created by:</span>
+                </div>
+                <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
+                  creatorName === "You" 
+                    ? "bg-indigo-50 text-indigo-600 border border-indigo-100" 
+                    : "bg-gray-100 text-gray-600"
+                }`}>
+                  {creatorName || "Unknown"}
+                </span>
               </div>
-              <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
-                creatorName === "You" 
-                  ? "bg-indigo-50 text-indigo-600 border border-indigo-100" 
-                  : "bg-gray-100 text-gray-600"
-              }`}>
-                {creatorName || "Unknown"}
-              </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center text-gray-500 space-x-1.5">
+                  <User className="w-3.5 h-3.5 text-gray-400" />
+                  <span>Updated by:</span>
+                </div>
+                <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
+                  updaterName === "You" 
+                    ? "bg-indigo-50 text-indigo-600 border border-indigo-100" 
+                    : "bg-gray-100 text-gray-600"
+                }`}>
+                  {updaterName || creatorName || "Unknown"}
+                </span>
+              </div>
             </div>
 
             {/* Layering Actions */}

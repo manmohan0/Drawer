@@ -145,7 +145,8 @@ export const getExistingShapesById = async (req: Request, res: Response) => {
     const correctShapes = shapes.map(shape => {
       const curShape = {
         id: shape.id,
-        userId: shape.userId,
+        userId: shape.createdByUserId,
+        updatedByUserId: shape.updatedByUserId,
         ...JSON.parse(shape.shape)
       }
       return curShape;

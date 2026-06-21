@@ -9,6 +9,7 @@ export type Shape = {
     color?: string;
     zIndex?: number;
     userId?: string;
+    updatedByUserId?: string;
 } | {
     id?: number;
     type: 'line';
@@ -19,6 +20,7 @@ export type Shape = {
     color?: string;
     zIndex?: number;
     userId?: string;
+    updatedByUserId?: string;
 } | {
     id?: number;
     type: 'circle';
@@ -29,6 +31,7 @@ export type Shape = {
     color?: string;
     zIndex?: number;
     userId?: string;
+    updatedByUserId?: string;
 } | {
     id?: number,
     type: 'image',
@@ -39,6 +42,7 @@ export type Shape = {
     height: number
     zIndex?: number;
     userId?: string;
+    updatedByUserId?: string;
 } | {
     id?: number;
     type: 'text';
@@ -49,6 +53,7 @@ export type Shape = {
     color?: string;
     zIndex?: number;
     userId?: string;
+    updatedByUserId?: string;
 } | {
     type: 'pointer',
     x: number,

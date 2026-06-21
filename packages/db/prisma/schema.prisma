@@ -24,7 +24,8 @@ model User {
   rooms      Room[]   @relation("RoomMembers")
   adminRooms Room[]   @relation("RoomAdmin")
   chats      Chat[]
-  shapes     Shapes[]
+  createdShapes Shapes[] @relation("createdByUser")
+  updatedShapes Shapes[] @relation("updatedByUser")
 }
 
 model Room {
@@ -49,11 +50,13 @@ model Chat {
 }
 
 model Shapes {
-  id        Int      @id @default(autoincrement())
-  roomId    Int
-  createdAt DateTime @default(now())
-  shape     String
-  userId    String
-  room      Room     @relation(fields: [roomId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
+  id              Int      @id @default(autoincrement())
+  roomId          Int
+  createdAt       DateTime @default(now())
+  shape           String
+  createdByUserId String
+  updatedByUserId String
+  room            Room     @relation(fields: [roomId], references: [id])
+  createdByUser   User     @relation("createdByUser", fields: [createdByUserId], references: [id])
+  updatedByUser   User     @relation("updatedByUser", fields: [updatedByUserId], references: [id])
 }

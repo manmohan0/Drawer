@@ -121,7 +121,8 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
         data: {
           roomId: room.id,
           shape: data.shape,
-          userId: userAuthenticated.userId
+          createdByUserId: userAuthenticated.userId,
+          updatedByUserId: userAuthenticated.userId
         },
       });
 
@@ -159,7 +160,8 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
             data: {
               roomId: room.id,
               shape: typeof s === 'string' ? s : JSON.stringify(s),
-              userId: userAuthenticated.userId
+              createdByUserId: userAuthenticated.userId,
+              updatedByUserId: userAuthenticated.userId
             }
           })
         )
@@ -217,7 +219,10 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
     try {
       const updatedShape = await prismaClient.shapes.update({
         where: { id: shapeId },
-        data: { shape: data.shape },
+        data: {
+          shape: data.shape,
+          updatedByUserId: userAuthenticated.userId
+        },
       });
 
       const payload = {

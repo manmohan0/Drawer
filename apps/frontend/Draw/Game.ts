@@ -509,6 +509,7 @@ export class Game {
         this.ctx.stroke();
       } else if (this.selectedTool === "circle") {
         const radius = Math.sqrt(width * width + height * height);
+        this.ctx.beginPath();
         this.ctx.arc(this.startX, this.startY, radius, 0, 2 * Math.PI);
         this.ctx.stroke();
       } else if (this.selectedTool === "image") {
@@ -716,12 +717,17 @@ export class Game {
         this.updateSelectors(rect);
       }
 
+      if (this.selectedShape && this.selectedShape.type !== "pointer") {
+        this.selectedShape.updatedByUserId = this.myUserId || undefined;
+      }
+
       this.ws.send(
         JSON.stringify({
           type: "update_shape",
           room: this.roomId,
           shapeId: shapeId,
           shape: JSON.stringify(this.selectedShape),
+          updatedBy: this.myUserId
         })
       );
 
@@ -883,7 +889,8 @@ export class Game {
 
       const updatedShape = {
         ...shape,
-        bg_color: this.selectedColor
+        bg_color: this.selectedColor,
+        updatedByUserId: this.myUserId || undefined
       };
 
       this.ws.send(
@@ -1044,6 +1051,7 @@ export class Game {
 
   updateShape = (updatedShape: Shape) => {
     if (updatedShape.type !== "pointer" && updatedShape.id) {
+      updatedShape.updatedByUserId = this.myUserId || undefined;
       const shapeIndex = this.existingShapes.findIndex((s) => s.type !== "pointer" && s.id === updatedShape.id);
       if (shapeIndex !== -1) {
         this.existingShapes[shapeIndex] = updatedShape;
@@ -1277,6 +1285,7 @@ export class Game {
         const shape = {
           id: data.shape.id,
           userId: data.userId,
+          updatedByUserId: data.userId,
           ...data.shape.shape,
         };
 
@@ -1293,6 +1302,7 @@ export class Game {
         if (shape) {
           const updatedShape = JSON.parse(data.shape.shape);
           Object.assign(shape, updatedShape);
+          shape.updatedByUserId = data.shape.updatedByUserId;
           console.log("shape updated", updatedShape)
           this.existingShapes.sort((a, b) => (a.type !== "pointer" && a.zIndex || 0) - (b.type !== "pointer" && b.zIndex || 0));
           this.clearCanvas();
