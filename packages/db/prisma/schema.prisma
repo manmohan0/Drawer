@@ -14,29 +14,40 @@ datasource db {
 }
 
 model User {
-  id         String   @id @default(uuid())
-  firstName  String
-  lastName   String
-  email      String   @unique
-  password   String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  rooms      Room[]   @relation("RoomMembers")
-  adminRooms Room[]   @relation("RoomAdmin")
-  chats      Chat[]
-  createdShapes Shapes[] @relation("createdByUser")
-  updatedShapes Shapes[] @relation("updatedByUser")
+  id            String     @id @default(uuid())
+  firstName     String
+  lastName      String
+  email         String     @unique
+  password      String
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  chats         Chat[]
+  createdShapes Shapes[]   @relation("createdByUser")
+  updatedShapes Shapes[]   @relation("updatedByUser")
+  roomUsers     roomUser[]
 }
 
 model Room {
-  id        Int      @id @default(autoincrement())
-  slug      Int      @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  users     User[]   @relation("RoomMembers")
-  admin     User[]   @relation("RoomAdmin")
+  id        Int        @id @default(autoincrement())
+  slug      Int        @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
   chats     Chat[]
   Shapes    Shapes[]
+  roomUsers roomUser[]
+}
+
+model roomUser {
+  id        Int      @id @default(autoincrement())
+  roomId    Int
+  userId    String
+  role      role
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  room      Room     @relation(fields: [roomId], references: [id])
+
+  @@unique([roomId, userId])
 }
 
 model Chat {
@@ -59,4 +70,10 @@ model Shapes {
   room            Room     @relation(fields: [roomId], references: [id])
   createdByUser   User     @relation("createdByUser", fields: [createdByUserId], references: [id])
   updatedByUser   User     @relation("updatedByUser", fields: [updatedByUserId], references: [id])
+}
+
+enum role {
+  Viewer
+  Editor
+  Owner
 }

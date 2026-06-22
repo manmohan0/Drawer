@@ -11,35 +11,40 @@ export const getMyRooms = async (req: Request, res: Response) => {
     }
     const myRooms = await prismaClient.room.findMany({
       where: {
-        OR: [
-          {
-            admin: {
-              some: {
-                id: userId,
-              },
-            },
+        roomUsers: {
+          some: {
+            userId: userId,
           },
-          {
-            users: {
-              some: {
-                id: userId,
-              },
-            },
-          },
-        ],
+        },
       },
       include: {
-        admin: {
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
+        roomUsers: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
           },
         },
       },
     });
-    res.status(200).json({ success: true, rooms: myRooms });
+
+    const roomsWithAdmin = myRooms.map((room) => {
+      const ownerEntry = room.roomUsers.find((ru) => ru.role === "Owner");
+      return {
+        id: room.id,
+        slug: room.slug,
+        createdAt: room.createdAt,
+        updatedAt: room.updatedAt,
+        admin: ownerEntry ? [ownerEntry.user] : [],
+      };
+    });
+
+    res.status(200).json({ success: true, rooms: roomsWithAdmin });
   } catch (e) {
     console.error("Failed to fetch my rooms:", e);
     res.status(500).json({ message: "Internal server error" });
@@ -61,11 +66,12 @@ export const createRoom = async (req: Request, res: Response) => {
     const newRoom = await prismaClient.room.create({
       data: {
         slug: Number(parsedBody.data.slug),
-        admin: {
-          connect: {
-            id: req.userId as string,
-          },
-        },
+        roomUsers: {
+          create: {
+            userId: req.userId as string,
+            role: "Owner",
+          }
+        }
       },
     });
     res.status(201).json({ message: "Room created successfully", roomId: newRoom.id });
@@ -94,9 +100,9 @@ export const joinRoom = async (req: Request, res: Response) => {
         slug: slugNum,
       },
       include: {
-        users: {
+        roomUsers: {
           where: {
-            id: req.userId as string,
+            userId: req.userId as string,
           },
         },
       },
@@ -107,24 +113,19 @@ export const joinRoom = async (req: Request, res: Response) => {
       return;
     }
 
-    if (room.users.length > 0) {
-      res.status(200).json({ message: "User already in room", roomId: room.id });
+    if (room.roomUsers.length > 0) {
+      res.status(200).json({ success: true, message: "User already in room", roomId: room.id, slug: room.slug });
       return;
     }
 
-    const updatedRoom = await prismaClient.room.update({
-      where: {
-        id: room.id,
-      },
+    await prismaClient.roomUser.create({
       data: {
-        users: {
-          connect: {
-            id: req.userId as string,
-          },
-        },
+        roomId: room.id,
+        userId: req.userId as string,
+        role: "Editor",
       },
     });
-    res.status(200).json({ success: true, message: "Joined room successfully", slug: updatedRoom.slug });
+    res.status(200).json({ success: true, message: "Joined room successfully", slug: room.slug });
   } catch (e) {
     console.error("Failed to join room:", e);
     res.status(500).json({ success: false, message: "Failed to join room" });
@@ -157,12 +158,16 @@ export const getChatsBySlug = async (req: Request, res: Response) => {
     const room = await prismaClient.room.findFirst({
       where: { slug: Number(slug) },
       include: {
-        admin: {
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
+        roomUsers: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
           },
         },
       },
@@ -171,7 +176,17 @@ export const getChatsBySlug = async (req: Request, res: Response) => {
       res.status(404).json({ message: "Room not found" });
       return;
     }
-    res.status(200).json({ room });
+
+    const owners = room.roomUsers.filter((ru) => ru.role === "Owner").map((ru) => ru.user)[0];
+    const mappedRoom = {
+      id: room.id,
+      slug: room.slug,
+      createdAt: room.createdAt,
+      updatedAt: room.updatedAt,
+      admin: owners,
+    };
+
+    res.status(200).json({ room: mappedRoom });
   } catch (e) {
     res.status(500).json({ message: "Failed to retrieve room" });
   }
@@ -216,3 +231,57 @@ export const getExistingShapesById = async (req: Request, res: Response) => {
     })
   }
 };
+
+export const getRoomMembersAndData = async (req: Request, res: Response) => {
+  const { slug } = req.params;
+
+  if (!slug) {
+    res.status(400).json({ message: "Room ID is required" });
+    return;
+  }
+
+  try {
+    const room = await prismaClient.room.findUnique({
+      where: { slug: Number(slug) },
+      include: {
+        roomUsers: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!room) {
+      res.status(404).json({ message: "Room not found" });
+      return;
+    }
+
+    const owner = room.roomUsers.find((ru) => ru.role === "Owner");
+    const mappedRoom = {
+      id: room.id,
+      slug: room.slug,
+      createdAt: room.createdAt,
+      updatedAt: room.updatedAt,
+      admin: owner ? owner.user : null,
+      members: room.roomUsers.map((ru) => ({
+        userId: ru.userId,
+        role: ru.role,
+        firstName: ru.user.firstName,
+        lastName: ru.user.lastName,
+        email: ru.user.email,
+        joinedAt: ru.createdAt,
+      })),
+    };
+
+    res.status(200).json({ success: true, room: mappedRoom });
+  } catch (e) {
+    res.status(500).json({ message: "Failed to retrieve room" });
+  }
+}

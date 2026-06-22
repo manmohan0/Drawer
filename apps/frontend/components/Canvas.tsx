@@ -564,23 +564,45 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                   Current Room Details
                 </span>
                 <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                  <div className="flex flex-col bg-white p-2 rounded-lg border border-orange-100/50 shadow-sm col-span-2">
+                  <div className="flex flex-col bg-white p-3.5 rounded-xl border border-orange-100/50 shadow-sm col-span-2">
                     <span className="text-[9px] uppercase font-bold text-gray-400">Room Code</span>
                     <span className="font-mono font-bold text-gray-800 text-sm mt-0.5">{currentRoom.slug}</span>
                   </div>
-                  <div className="flex flex-col bg-white p-2 rounded-lg border border-orange-100/50 shadow-sm">
+                  <div className="flex flex-col bg-white p-3.5 rounded-xl border border-orange-100/50 shadow-sm">
                     <span className="text-[9px] uppercase font-bold text-gray-400">Admin</span>
-                    <span className="font-medium text-gray-800 mt-0.5 truncate" title={currentRoom.admin?.map((a: any) => `${a.firstName} ${a.lastName}`).join(", ") || "None"}>
-                      {currentRoom.admin?.[0] ? `${currentRoom.admin[0].firstName} ${currentRoom.admin[0].lastName}` : "Unknown"}
+                    <span 
+                      className="font-medium text-gray-800 mt-0.5 truncate text-xs" 
+                      title={
+                        Array.isArray(currentRoom.admin)
+                          ? currentRoom.admin.map((a: any) => `${a.firstName} ${a.lastName}`).join(", ")
+                          : currentRoom.admin
+                            ? `${currentRoom.admin.firstName} ${currentRoom.admin.lastName}`
+                            : "None"
+                      }
+                    >
+                      {Array.isArray(currentRoom.admin)
+                        ? (currentRoom.admin[0] ? `${currentRoom.admin[0].firstName} ${currentRoom.admin[0].lastName}` : "Unknown")
+                        : (currentRoom.admin ? `${currentRoom.admin.firstName} ${currentRoom.admin.lastName}` : "Unknown")
+                      }
                     </span>
                   </div>
-                  <div className="flex flex-col bg-white p-2 rounded-lg border border-orange-100/50 shadow-sm">
+                  <div className="flex flex-col bg-white p-3.5 rounded-xl border border-orange-100/50 shadow-sm">
                     <span className="text-[9px] uppercase font-bold text-gray-400">Created On</span>
                     <span className="font-medium text-gray-800 mt-0.5">
                       {new Date(currentRoom.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    router.push(`/room-details/${currentRoom.slug}`);
+                    setIsDropdownOpen(false);
+                  }}
+                  className="w-full flex items-center justify-center space-x-1.5 px-3 py-1.5 bg-orange-100/50 hover:bg-orange-100 text-orange-700 hover:text-orange-800 font-bold rounded-xl text-[10px] transition-all duration-200 active:scale-95 shadow-inner mt-2 cursor-pointer"
+                >
+                  <span>View Members & Roles</span>
+                </button>
               </div>
             )}
 

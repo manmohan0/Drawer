@@ -38,22 +38,13 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       if (!isNaN(slugNum)) {
         const roomUsers = await prismaClient.user.findMany({
           where: {
-            OR: [
-              {
-                rooms: {
-                  some: {
-                    slug: slugNum,
-                  },
+            roomUsers: {
+              some: {
+                room: {
+                  slug: slugNum,
                 },
               },
-              {
-                adminRooms: {
-                  some: {
-                    slug: slugNum,
-                  },
-                },
-              },
-            ],
+            },
           },
         });
 
