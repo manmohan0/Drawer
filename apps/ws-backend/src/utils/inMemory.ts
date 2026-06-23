@@ -6,6 +6,7 @@ export interface User {
   lastName: string;
   ws: WebSocket;
   rooms: string[];
+  roles?: Record<string, string>;
 }
 
 export const users: User[] = [];

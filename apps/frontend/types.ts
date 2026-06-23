@@ -9,6 +9,7 @@ export type Shape = {
     color?: string;
     zIndex?: number;
     userId?: string;
+    angle?: number;
     updatedByUserId?: string;
 } | {
     id?: number;
@@ -21,6 +22,7 @@ export type Shape = {
     zIndex?: number;
     userId?: string;
     updatedByUserId?: string;
+    angle?: number;
 } | {
     id?: number;
     type: 'circle';
@@ -32,6 +34,7 @@ export type Shape = {
     zIndex?: number;
     userId?: string;
     updatedByUserId?: string;
+    angle?: number;
 } | {
     id?: number,
     type: 'image',
@@ -43,6 +46,7 @@ export type Shape = {
     zIndex?: number;
     userId?: string;
     updatedByUserId?: string;
+    angle?: number
 } | {
     id?: number;
     type: 'text';
@@ -55,11 +59,6 @@ export type Shape = {
     userId?: string;
     updatedByUserId?: string;
 }
-//  | {
-//     type: 'pointer',
-//     x: number,
-//     y: number,
-// }
 
 export type selector = {
     id: number;
@@ -67,6 +66,9 @@ export type selector = {
     centerX: number;
     centerY: number;
     radius: number;
+    angle?: number;
 }
 
 export type ShapeType = 'rect' | 'line' | 'circle' | 'image' | 'pointer' | 'bucket' | 'text';
+
+export type role = "Viewer" | "Editor" | "Owner";

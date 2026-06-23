@@ -13,6 +13,8 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
   const [room, setRoom] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
 
   const getMembersList = () => {
     const list = [...(room?.members || [])];
@@ -28,6 +30,42 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
       });
     }
     return list;
+  };
+
+  const handleRoleChange = async (memberUserId: string, newRole: string) => {
+    const token = getCookie("Authorization");
+    if (!token) return;
+
+    setUpdatingUserId(memberUserId);
+    try {
+      const res = await axios.put(
+        `${BACKEND_URL}/room/${slug}/updateRole`,
+        { role: newRole, userId: memberUserId },
+        {
+          headers: {
+            Authorization: token,
+          },
+          withCredentials: true,
+        }
+      );
+      if (res.data && res.data.success) {
+        // Refresh room details to reflect the change
+        const roomRes = await axios.get(`${BACKEND_URL}/room/roomDetails/${slug}`, {
+          headers: {
+            Authorization: token,
+          },
+          withCredentials: true,
+        });
+        if (roomRes.data && roomRes.data.room) {
+          setRoom(roomRes.data.room);
+        }
+      }
+    } catch (err: any) {
+      console.error("Failed to update role:", err);
+      alert(err.response?.data?.message || "Failed to update role.");
+    } finally {
+      setUpdatingUserId(null);
+    }
   };
 
   useEffect(() => {
@@ -47,6 +85,7 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
         });
         if (res.data && res.data.room) {
           setRoom(res.data.room);
+          setCurrentUserId(res.data.currentUserId || null);
         } else {
           setError("Could not retrieve room details.");
         }
@@ -206,9 +245,32 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
                         </div>
                       </td>
                       <td className="py-4 px-4">
-                        <span className={`inline-flex px-3.5 py-1.5 text-[10px] font-bold rounded-lg border uppercase tracking-wider shadow-sm ${roleStyle}`}>
-                          {member.role}
-                        </span>
+                        {member.userId === currentUserId ? (
+                          <span className={`inline-flex px-3.5 py-1.5 text-[10px] font-bold rounded-lg border uppercase tracking-wider shadow-sm ${roleStyle}`}>
+                            {member.role}
+                          </span>
+                        ) : updatingUserId === member.userId ? (
+                          <div className="flex items-center space-x-1.5 text-[10px] text-zinc-500 font-bold uppercase py-1">
+                            <Loader2 className="w-3 h-3 animate-spin text-orange-500" />
+                            <span>Updating...</span>
+                          </div>
+                        ) : (
+                          <select
+                            value={member.role}
+                            onChange={(e) => handleRoleChange(member.userId, e.target.value)}
+                            className={`px-3 py-1.5 text-[10px] font-bold rounded-lg border uppercase tracking-wider shadow-sm bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700 focus:outline-none focus:ring-1 focus:ring-orange-500/50 cursor-pointer transition-colors ${
+                              member.role === "Owner"
+                                ? "text-amber-400 border-amber-500/20 bg-amber-500/5"
+                                : member.role === "Editor"
+                                  ? "text-indigo-400 border-indigo-500/20 bg-indigo-500/5"
+                                  : "text-zinc-400 border-zinc-700/60 bg-zinc-850"
+                            }`}
+                          >
+                            <option value="Viewer">Viewer</option>
+                            <option value="Editor">Editor</option>
+                            <option value="Owner">Owner</option>
+                          </select>
+                        )}
                       </td>
                       <td className="py-4 px-4 text-zinc-500 text-xs text-right font-mono">
                         {new Date(member.joinedAt).toLocaleDateString(undefined, {

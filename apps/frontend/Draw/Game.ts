@@ -1,7 +1,9 @@
 import { BACKEND_URL } from "@/config";
-import { selector, Shape, ShapeType } from "@/types";
-import { getCookie } from "@/utils/cookie";
+import { role, selector, Shape, ShapeType } from "@/types";
 import axios from "axios";
+import { RotateCcw } from "lucide-react";
+
+const ROTATE_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`;
 
 /**
  * The `Game` class manages the collaborative whiteboard engine.
@@ -40,6 +42,10 @@ export class Game {
   private selectedShape: Shape | null = null;
   // Array of bounding box handles (control points) used to resize/modify the selected shape
   private shapeSelectors: selector[] = [];
+  private rotateIconLocation: { x: number, y: number } | null = null;
+  private rotateImg: HTMLImageElement | null;
+  private isRotating: boolean = false;
+
   // The specific selector handle being dragged, or null if not dragging any handle
   private draggedSelector: selector | null = null;
   // Copy of the selected shape state when a drag/resize action begins (to compute relative delta changes)
@@ -51,7 +57,10 @@ export class Game {
   //map of userIds and their details
   private users: Record<string, { firstName: string, lastName: string }> = {};
   private myUserId: string | null = null;
+  private myRole: role | null = null;
   private onSelectionChange?: (shape: Shape | null) => void;
+  public onMouseMove?: (x: number, y: number) => void;
+  public onRoleChange?: (role: role) => void;
   public editingTextShapeId: number | undefined;
   public onStartTextEdit?: (x: number, y: number, text: string, fontSize: number, onSave: (val: string) => void, onCancel: () => void) => void;
   public onRoomJoined?: (myUserId: string, users: Record<string, { firstName: string; lastName: string }>) => void;
@@ -72,6 +81,8 @@ export class Game {
     this.existingShapes = [];
     this.tempShapes = [];
     this.isClicked = false;
+    this.rotateImg = new Image();
+    this.rotateImg.src = ROTATE_SVG;
 
     // Initialize state, load existing shapes, set up event listeners, and clear the screen
     this.init();
@@ -89,10 +100,15 @@ export class Game {
     if (tool !== "pointer" && this.selectedShape) {
       this.selectedShape = null;
       this.shapeSelectors = [];
+      this.rotateIconLocation = null;
       this.clearCanvas();
       this.triggerSelectionChange();
     }
   };
+
+  setMyRole = (role: role) => {
+    this.myRole = role;
+  }
 
   /**
    * Gets the currently active drawing tool.
@@ -231,6 +247,7 @@ export class Game {
    * Brings the selected shape forward by one position among overlapping shapes.
    */
   bringForward = () => {
+    if (this.myRole === "Viewer") return;
     if (!this.selectedShape) return;
 
     // Get all non-pointer shapes that overlap with the selected shape, including itself
@@ -271,12 +288,13 @@ export class Game {
    * Sends the selected shape backward by one position among overlapping shapes.
    */
   sendBackward = () => {
+    if (this.myRole === "Viewer") return;
     if (!this.selectedShape) return;
 
     // Get all non-pointer shapes that overlap with the selected shape, including itself
     const overlapping = this.existingShapes.filter(
       (s) => (s.id === this.selectedShape?.id ||
-          (this.selectedShape && this.checkOverlap(this.selectedShape, s)))
+        (this.selectedShape && this.checkOverlap(this.selectedShape, s)))
     );
 
     if (overlapping.length <= 1) {
@@ -396,6 +414,7 @@ export class Game {
    * @param shape The image shape to update.
    */
   private triggerImageUpload = (shape: Shape) => {
+    if (this.myRole === "Viewer") return;
     if (shape.type !== "image") return;
 
     // 1. Create a dynamic off-screen HTML5 file input element in browser memory
@@ -419,17 +438,27 @@ export class Game {
       fileReader.onload = () => {
         const base64Url = fileReader.result as string;
         if (!base64Url) return;
-        shape.url = base64Url;
-        this.clearCanvas();
-        this.triggerSelectionChange();
-        this.ws.send(
-          JSON.stringify({
-            type: "update_shape",
-            room: this.roomId,
-            shapeId: shape.id || -1,
-            shape: JSON.stringify(shape),
-          })
-        );
+
+        const tempImg = new Image();
+        tempImg.onload = () => {
+          shape.url = base64Url;
+          if (tempImg.width && tempImg.height) {
+            const aspect = tempImg.width / tempImg.height;
+            shape.height = shape.width / aspect;
+          }
+          this.updateSelectors(shape);
+          this.clearCanvas();
+          this.triggerSelectionChange();
+          this.ws.send(
+            JSON.stringify({
+              type: "update_shape",
+              room: this.roomId,
+              shapeId: shape.id || -1,
+              shape: JSON.stringify(shape),
+            })
+          );
+        };
+        tempImg.src = base64Url;
       };
       fileReader.readAsDataURL(file);
     };
@@ -438,6 +467,28 @@ export class Game {
     input.click();
   };
 
+  private getShapeCenters = (shape: Shape) => {
+    switch (shape.type) {
+      case "rect": {
+        return { centerX: shape.startX + shape.width / 2, centerY: shape.startY + shape.height / 2 };
+      }
+      case "circle": {
+        return { centerX: shape.centerX, centerY: shape.centerY };
+      }
+      case "line": {
+        return { centerX: shape.startX + (shape.endX - shape.startX) / 2, centerY: shape.startY + (shape.endY - shape.startY) / 2 }
+      }
+      case "image": {
+        return { centerX: shape.startX + shape.width / 2, centerY: shape.startY + shape.height / 2 };
+      }
+      case "text": {
+        return { centerX: shape.startX, centerY: shape.startY };
+      }
+      default: {
+        return { centerX: 0, centerY: 0 }
+      }
+    }
+  }
   /**
    * Handles the 'mousedown' event.
    * Responsible for initiating drawing, entering viewport pan mode, selecting shapes, 
@@ -449,6 +500,21 @@ export class Game {
     this.startX = x;
     this.startY = y;
 
+    if (this.myRole === "Viewer") {
+      if (this.selectedTool !== "pointer") {
+        alert("You are in view-only mode");
+      }
+      return;
+    }
+
+    if (this.rotateIconLocation && this.selectedShape) {
+      if (x > this.rotateIconLocation.x - 10 && x < this.rotateIconLocation.x + 20 && y > this.rotateIconLocation.y - 10 && y < this.rotateIconLocation.y + 20) {
+        this.originalShape = this.selectedShape;
+        this.isRotating = true;
+        return;
+      }
+    }
+
     // Pointer tool logic: Determine if the user is clicking a control handle or a shape
     if (this.selectedTool === "pointer") {
       const hit = this.hitTest(x, y);
@@ -456,7 +522,7 @@ export class Game {
       // Store a deep copy of the selected shape configuration to track offset modifications accurately
       this.originalShape = JSON.parse(JSON.stringify(this.selectedShape));
 
-      if (hit && hit.type === "selector" && this.selectedShape) {
+      if (hit && hit !== "rotate" && hit.type === "selector" && this.selectedShape) {
         // User clicked directly on a resize selector handle
         this.draggedSelector = hit;
       } else {
@@ -472,6 +538,16 @@ export class Game {
    * and dragging complete shapes across the canvas coordinate space.
    */
   mouseMoveHandler = (e: MouseEvent) => {
+    const { x: currentX, y: currentY } = this.getMousePos(e);
+    if (this.onMouseMove) {
+      this.onMouseMove(Math.round(currentX), Math.round(currentY));
+    }
+
+    if (this.myRole === "Viewer" && !this.isPan) {
+      this.isClicked = false;
+      return;
+    }
+
     // If the pan mode is active (activated via spacebar), adjust the pan offset relative to screen translation
     if (this.isPan && this.isClicked) {
       this.panX += e.movementX;
@@ -479,8 +555,6 @@ export class Game {
       this.clearCanvas();
       return;
     }
-
-    const { x: currentX, y: currentY } = this.getMousePos(e);
 
     // Dynamic drawing preview logic (only runs while dragging and when not in selection mode or panning mode)
     if (
@@ -532,6 +606,20 @@ export class Game {
     if (this.isClicked && this.selectedShape && this.originalShape && !this.isPan) {
       const deltaX = currentX - this.startX;
       const deltaY = currentY - this.startY;
+      if (this.isRotating && this.rotateIconLocation) {
+        const { centerX, centerY } = this.getShapeCenters(this.selectedShape);
+
+        // Calculate angle and offset by 90 degrees since the handle is at the top (-90 degrees)
+        const angle = Math.atan2(currentY - centerY, currentX - centerX) * (180 / Math.PI) + 90;
+
+        if (this.selectedShape.type !== "text") {
+          this.selectedShape.angle = angle;
+        }
+
+        this.updateSelectors(this.selectedShape);
+        this.clearCanvas();
+        return;
+      }
 
       if (this.draggedSelector) {
         // CASE A: Dragging a specific resize handle
@@ -543,66 +631,88 @@ export class Game {
           const rect = this.selectedShape;
           const selectorId = this.draggedSelector.id;
 
-          // Resize rect using the specific corner handle index (1 to 4)
-          if (rect.type === "image" && originalRect.type === "image") {
-            const originalWidth = originalRect.width;
-            const originalHeight = originalRect.height;
-            const aspectRatio = originalWidth / originalHeight || 1;
+          const { centerX, centerY } = this.getShapeCenters(originalRect)
+          const rad = (originalRect.angle || 0) * Math.PI / 180;
+          const w = originalRect.width;
+          const h = originalRect.height;
 
-            switch (selectorId) {
-              case 1: { // Top-left corner
-                const maxDelta = Math.abs(deltaX) > Math.abs(deltaY) * aspectRatio ? deltaX : deltaY * aspectRatio;
-                rect.width = originalWidth - maxDelta;
-                rect.height = originalHeight - maxDelta / aspectRatio;
-                rect.startX = originalRect.startX + maxDelta;
-                rect.startY = originalRect.startY + maxDelta / aspectRatio;
-                break;
-              }
-              case 2: { // Top-right corner
-                const maxDelta = Math.abs(deltaX) > Math.abs(deltaY) * aspectRatio ? deltaX : -deltaY * aspectRatio;
-                rect.width = originalWidth + maxDelta;
-                rect.height = originalHeight + maxDelta / aspectRatio;
-                rect.startY = originalRect.startY - maxDelta / aspectRatio;
-                break;
-              }
-              case 3: { // Bottom-right corner
-                const maxDelta = Math.abs(deltaX) > Math.abs(deltaY) * aspectRatio ? deltaX : deltaY * aspectRatio;
-                rect.width = originalWidth + maxDelta;
-                rect.height = originalHeight + maxDelta / aspectRatio;
-                break;
-              }
-              case 4: { // Bottom-left corner
-                const maxDelta = Math.abs(deltaX) > Math.abs(deltaY) * aspectRatio ? -deltaX : deltaY * aspectRatio;
-                rect.width = originalWidth + maxDelta;
-                rect.height = originalHeight + maxDelta / aspectRatio;
-                rect.startX = originalRect.startX - maxDelta;
-                break;
-              }
-            }
-          } else {
-            switch (selectorId) {
-              case 1: // Top-left corner
-                rect.startX = originalRect.startX + deltaX;
-                rect.startY = originalRect.startY + deltaY;
-                rect.width = originalRect.width - deltaX;
-                rect.height = originalRect.height - deltaY;
-                break;
-              case 2: // Top-right corner
-                rect.startY = originalRect.startY + deltaY;
-                rect.width = originalRect.width + deltaX;
-                rect.height = originalRect.height - deltaY;
-                break;
-              case 3: // Bottom-right corner
-                rect.width = originalRect.width + deltaX;
-                rect.height = originalRect.height + deltaY;
-                break;
-              case 4: // Bottom-left corner
-                rect.startX = originalRect.startX + deltaX;
-                rect.width = originalRect.width - deltaX;
-                rect.height = originalRect.height + deltaY;
-                break;
-            }
+          let dragged_corner_local = { x: 0, y: 0 };
+          let fixed_corner_local = { x: 0, y: 0 };
+
+          switch (selectorId) {
+            case 1: // Top-left
+              dragged_corner_local = { x: -w / 2, y: -h / 2 };
+              fixed_corner_local = { x: w / 2, y: h / 2 };
+              break;
+            case 2: // Top-right
+              dragged_corner_local = { x: w / 2, y: -h / 2 };
+              fixed_corner_local = { x: -w / 2, y: h / 2 };
+              break;
+            case 3: // Bottom-right
+              dragged_corner_local = { x: w / 2, y: h / 2 };
+              fixed_corner_local = { x: -w / 2, y: -h / 2 };
+              break;
+            case 4: // Bottom-left
+              dragged_corner_local = { x: -w / 2, y: h / 2 };
+              fixed_corner_local = { x: w / 2, y: -h / 2 };
+              break;
           }
+
+          // Transform current mouse coordinates to original shape's local system
+          const dx = currentX - centerX;
+          const dy = currentY - centerY;
+          const cosNeg = Math.cos(-rad);
+          const sinNeg = Math.sin(-rad);
+          const localM = {
+            x: dx * cosNeg - dy * sinNeg,
+            y: dx * sinNeg + dy * cosNeg
+          };
+
+          let dragged_local = { x: 0, y: 0 };
+
+          if (rect.type === "image" && originalRect.type === "image") {
+            // Keep aspect ratio for images
+            const original_diagonal = {
+              x: dragged_corner_local.x - fixed_corner_local.x,
+              y: dragged_corner_local.y - fixed_corner_local.y
+            };
+            const new_diagonal_local = {
+              x: localM.x - fixed_corner_local.x,
+              y: localM.y - fixed_corner_local.y
+            };
+            const denom = original_diagonal.x ** 2 + original_diagonal.y ** 2;
+            const k = denom !== 0 ? (new_diagonal_local.x * original_diagonal.x + new_diagonal_local.y * original_diagonal.y) / denom : 0;
+
+            const constrained_diagonal = {
+              x: k * original_diagonal.x,
+              y: k * original_diagonal.y
+            };
+            dragged_local = {
+              x: fixed_corner_local.x + constrained_diagonal.x,
+              y: fixed_corner_local.y + constrained_diagonal.y
+            };
+          } else {
+            // Allow non-uniform scaling for normal rectangles
+            dragged_local = localM;
+          }
+
+          const newWidth = Math.abs(dragged_local.x - fixed_corner_local.x);
+          const newHeight = Math.abs(dragged_local.y - fixed_corner_local.y);
+
+          const newLocalCenter = {
+            x: (dragged_local.x + fixed_corner_local.x) / 2,
+            y: (dragged_local.y + fixed_corner_local.y) / 2
+          };
+
+          const cosPos = Math.cos(rad);
+          const sinPos = Math.sin(rad);
+          const newCx = centerX + newLocalCenter.x * cosPos - newLocalCenter.y * sinPos;
+          const newCy = centerY + newLocalCenter.x * sinPos + newLocalCenter.y * cosPos;
+
+          rect.width = newWidth;
+          rect.height = newHeight;
+          rect.startX = newCx - newWidth / 2;
+          rect.startY = newCy - newHeight / 2;
 
           this.updateSelectors(rect);
           this.clearCanvas();
@@ -685,6 +795,11 @@ export class Game {
    * to the backend WebSocket channel so other users see updates in real time.
    */
   mouseUpHandler = (e: MouseEvent) => {
+    if (this.myRole === "Viewer") {
+      this.isClicked = false;
+      return;
+    }
+
     if (this.isPan) {
       this.isClicked = false;
       return;
@@ -728,6 +843,7 @@ export class Game {
 
       this.draggedSelector = null;
       this.originalShape = null;
+      this.isRotating = false;
       this.triggerSelectionChange();
 
       return;
@@ -738,7 +854,7 @@ export class Game {
 
     const width = currentX - this.startX;
     const height = currentY - this.startY;
-    
+
     if (!this.myUserId) {
       console.error("No user ID found");
       return;
@@ -819,67 +935,50 @@ export class Game {
         // Clicked on empty canvas space -> Deselect currently selected shape
         this.selectedShape = null;
         this.shapeSelectors = [];
+        this.rotateIconLocation = null;
         this.triggerSelectionChange();
-      } else if (hitResult.type === "selector") {
+      } else if (hitResult !== "rotate" && hitResult.type === "selector") {
         // Clicked on a resize handle selector -> Selection state remains unchanged
-      } else {
+      } else if (hitResult === "rotate") {
+        // Clicked on the rotate icon
+      }
+      else {
         // Clicked on a shape body -> Set selection and build corresponding resize handle coordinates
         this.selectedShape = hitResult;
         this.triggerSelectionChange();
 
         // Check if clicked inside the middle 1/3 of an image placeholder shape to trigger upload
         if (hitResult.type === "image" && !hitResult.url) {
+          const { centerX, centerY } = this.getShapeCenters(hitResult);
+          const rad = (hitResult.angle || 0) * Math.PI / 180;
+          const dx_click = x - centerX;
+          const dy_click = y - centerY;
+          const unrotatedX = centerX + dx_click * Math.cos(-rad) - dy_click * Math.sin(-rad);
+          const unrotatedY = centerY + dx_click * Math.sin(-rad) + dy_click * Math.cos(-rad);
+
           const midXMin = hitResult.startX + hitResult.width / 3;
           const midXMax = hitResult.startX + (2 * hitResult.width) / 3;
           const midYMin = hitResult.startY + hitResult.height / 3;
           const midYMax = hitResult.startY + (2 * hitResult.height) / 3;
 
-          if (x >= midXMin && x <= midXMax && y >= midYMin && y <= midYMax) {
+          if (unrotatedX >= midXMin && unrotatedX <= midXMax && unrotatedY >= midYMin && unrotatedY <= midYMax) {
             this.triggerImageUpload(hitResult);
             this.clearCanvas();
             return;
           }
         }
 
-        if (hitResult.type === "rect" || hitResult.type === "image") {
-          this.updateSelectors(hitResult);
-        } else if (hitResult.type === "circle") {
-          const radius = 6;
-          this.shapeSelectors = [];
-          this.shapeSelectors.push({
-            id: 1,
-            centerX: hitResult.centerX,
-            centerY: hitResult.centerY,
-            radius,
-            type: "selector",
-          });
-        } else if (hitResult.type === "line") {
-          const radius = 6;
-          this.shapeSelectors = [];
-          this.shapeSelectors.push({
-            id: 1,
-            centerX: hitResult.startX,
-            centerY: hitResult.startY,
-            radius,
-            type: "selector",
-          });
-          this.shapeSelectors.push({
-            id: 2,
-            centerX: hitResult.endX,
-            centerY: hitResult.endY,
-            radius,
-            type: "selector",
-          });
-        }
+        this.updateSelectors(hitResult);
       }
       this.clearCanvas();
     }
 
     if (this.selectedTool === "bucket") {
+      if (this.myRole === "Viewer") return;
       const { x, y } = this.getMousePos(e);
       const shape = this.hitTest(x, y);
 
-      if (!shape) return;
+      if (!shape || shape === "rotate") return;
 
       const updatedShape = {
         ...shape,
@@ -898,6 +997,7 @@ export class Game {
     }
 
     if (this.selectedTool === "text") {
+      if (this.myRole === "Viewer") return;
       const { x, y } = this.getMousePos(e);
       const screenX = e.clientX;
       const screenY = e.clientY;
@@ -928,19 +1028,20 @@ export class Game {
             })
           );
         },
-        () => {}
+        () => { }
       );
     }
   };
 
   mouseDoubleClickHandler = (e: MouseEvent) => {
+    if (this.myRole === "Viewer") return;
     if (this.selectedTool === "pointer") {
       const { x, y } = this.getMousePos(e);
       const hitResult = this.hitTest(x, y);
 
-      if (hitResult && hitResult.type === "image") {
+      if (hitResult && hitResult !== "rotate" && hitResult.type === "image") {
         this.triggerImageUpload(hitResult);
-      } else if (hitResult && hitResult.type === "text") {
+      } else if (hitResult && hitResult !== "rotate" && hitResult.type === "text") {
         const canvasRect = this.canvas.getBoundingClientRect();
         const screenX = canvasRect.left + (hitResult.startX * this.zoom + this.panX);
         const screenY = canvasRect.top + (hitResult.startY * this.zoom + this.panY);
@@ -1044,6 +1145,7 @@ export class Game {
   };
 
   updateShape = (updatedShape: Shape) => {
+    if (this.myRole === "Viewer") return;
     if (updatedShape.id) {
       updatedShape.updatedByUserId = this.myUserId || undefined;
       const shapeIndex = this.existingShapes.findIndex((s) => s.id === updatedShape.id);
@@ -1067,6 +1169,7 @@ export class Game {
   };
 
   deleteSelectedShape = () => {
+    if (this.myRole === "Viewer") return;
     if (!this.selectedShape) return;
     this.ws.send(
       JSON.stringify({
@@ -1081,6 +1184,7 @@ export class Game {
   };
 
   deleteShapeById = (id?: number) => {
+    if (this.myRole === "Viewer") return;
     if (id === undefined) return;
     this.ws.send(
       JSON.stringify({
@@ -1099,38 +1203,63 @@ export class Game {
   updateSelectors = (shape: Shape) => {
     if (shape.type === "rect" || shape.type === "image") {
       const radius = 6;
+      const { centerX, centerY } = this.getShapeCenters(shape)
+      const rad = (shape.angle || 0) * Math.PI / 180;
+
+      // Function to rotate a relative point around the shape center
+      const getRotatedCorner = (dx: number, dy: number) => {
+        const x = centerX + dx * Math.cos(rad) - dy * Math.sin(rad);
+        const y = centerY + dx * Math.sin(rad) + dy * Math.cos(rad);
+        return { x, y };
+      };
+
+      // Calculate rotated positions of the 4 corners
+      const tl = getRotatedCorner(-shape.width / 2, -shape.height / 2);
+      const tr = getRotatedCorner(shape.width / 2, -shape.height / 2);
+      const br = getRotatedCorner(shape.width / 2, shape.height / 2);
+      const bl = getRotatedCorner(-shape.width / 2, shape.height / 2);
+
+      // Rotate logo is drawn 40px above the top-middle edge of the shape
+      const logoPos = getRotatedCorner(0, -shape.height / 2 - 40);
+      // We store it centered for a 20x20 icon size
+      this.rotateIconLocation = { x: logoPos.x - 10, y: logoPos.y - 10 };
+
       this.shapeSelectors = [];
       // Top-Left handle
       this.shapeSelectors.push({
         id: 1,
-        centerX: shape.startX,
-        centerY: shape.startY,
+        centerX: tl.x,
+        centerY: tl.y,
         radius: radius / this.zoom,
         type: "selector",
+        angle: shape.angle || 0
       });
       // Top-Right handle
       this.shapeSelectors.push({
         id: 2,
-        centerX: shape.startX + shape.width,
-        centerY: shape.startY,
+        centerX: tr.x,
+        centerY: tr.y,
         radius: radius / this.zoom,
         type: "selector",
+        angle: shape.angle || 0
       });
       // Bottom-Right handle
       this.shapeSelectors.push({
         id: 3,
-        centerX: shape.startX + shape.width,
-        centerY: shape.startY + shape.height,
+        centerX: br.x,
+        centerY: br.y,
         radius: radius / this.zoom,
         type: "selector",
+        angle: shape.angle || 0
       });
       // Bottom-Left handle
       this.shapeSelectors.push({
         id: 4,
-        centerX: shape.startX,
-        centerY: shape.startY + shape.height,
+        centerX: bl.x,
+        centerY: bl.y,
         radius: radius / this.zoom,
         type: "selector",
+        angle: shape.angle || 0
       });
     } else if (shape.type === "circle") {
       const radius = 6;
@@ -1142,23 +1271,41 @@ export class Game {
         centerY: shape.centerY,
         radius: radius / this.zoom,
         type: "selector",
+        // angle: shape.angle || 0
       });
     } else if (shape.type === "line") {
+      const { centerX, centerY } = this.getShapeCenters(shape);
+      const rad = (shape.angle || 0) * Math.PI / 180;
+
+      const getRotatedPoint = (dx: number, dy: number) => {
+        const x = centerX + dx * Math.cos(rad) - dy * Math.sin(rad);
+        const y = centerY + dx * Math.sin(rad) + dy * Math.cos(rad);
+        return { x, y };
+      };
+
+      // Calculate rotated endpoints
+      const startRotated = getRotatedPoint(shape.startX - centerX, shape.startY - centerY);
+      const endRotated = getRotatedPoint(shape.endX - centerX, shape.endY - centerY);
+
+      // Rotate logo is drawn 40px above the midpoint
+      const logoPos = getRotatedPoint(0, -40);
+      this.rotateIconLocation = { x: logoPos.x - 10, y: logoPos.y - 10 };
+
       const radius = 6;
       this.shapeSelectors = [];
       // Handle at line start coordinate
       this.shapeSelectors.push({
         id: 1,
-        centerX: shape.startX,
-        centerY: shape.startY,
+        centerX: startRotated.x,
+        centerY: startRotated.y,
         radius: radius / this.zoom,
         type: "selector",
       });
       // Handle at line end coordinate
       this.shapeSelectors.push({
         id: 2,
-        centerX: shape.endX,
-        centerY: shape.endY,
+        centerX: endRotated.x,
+        centerY: endRotated.y,
         radius: radius / this.zoom,
         type: "selector",
       });
@@ -1175,6 +1322,17 @@ export class Game {
    * @returns The intersected selector or shape object, or null if nothing was clicked.
    */
   hitTest = (x: number, y: number) => {
+    //first check with rotate icon if it is there
+    if (this.rotateIconLocation) {
+      const dist = Math.sqrt(
+        (x - this.rotateIconLocation.x) ** 2 + (y - this.rotateIconLocation.y) ** 2
+      );
+      if (dist <= 10) {
+        console.log("rotate")
+        return "rotate";
+      }
+    }
+
     // 1. Check intersection with selector handles (high-priority check)
     for (let i = 0; i < this.shapeSelectors.length; i++) {
       const selectorId = i + 1;
@@ -1192,12 +1350,21 @@ export class Game {
       const shape = this.existingShapes[i];
 
       if (shape.type === "rect" || shape.type === "image") {
+        const { centerX, centerY } = this.getShapeCenters(shape);
+        const rad = (shape.angle || 0) * Math.PI / 180;
+        
+        // Rotate test point back to unrotated space around center
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const unrotatedX = centerX + dx * Math.cos(-rad) - dy * Math.sin(-rad);
+        const unrotatedY = centerY + dx * Math.sin(-rad) + dy * Math.cos(-rad);
+
         // Point-in-rectangle check (handles negative width and height correctly)
         const xMin = Math.min(shape.startX, shape.startX + shape.width);
         const xMax = Math.max(shape.startX, shape.startX + shape.width);
         const yMin = Math.min(shape.startY, shape.startY + shape.height);
         const yMax = Math.max(shape.startY, shape.startY + shape.height);
-        if (x >= xMin && x <= xMax && y >= yMin && y <= yMax) {
+        if (unrotatedX >= xMin && unrotatedX <= xMax && unrotatedY >= yMin && unrotatedY <= yMax) {
           return shape;
         }
       } else if (shape.type === "circle") {
@@ -1209,14 +1376,23 @@ export class Game {
           return shape;
         }
       } else if (shape.type === "line") {
-        // Closest-point-on-line-segment check using projection:
+        const { centerX, centerY } = this.getShapeCenters(shape);
+        const rad = (shape.angle || 0) * Math.PI / 180;
+
+        // Rotate test point back to unrotated space around center
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const unrotatedX = centerX + dx * Math.cos(-rad) - dy * Math.sin(-rad);
+        const unrotatedY = centerY + dx * Math.sin(-rad) + dy * Math.cos(-rad);
+
+        // Closest-point-on-line-segment check using projection on unrotated coords:
         const x1 = shape.startX;
         const y1 = shape.startY;
         const x2 = shape.endX;
         const y2 = shape.endY;
 
-        const A = x - x1; // Vector from start point to test coordinates
-        const B = y - y1;
+        const A = unrotatedX - x1; // Vector from start point to test coordinates
+        const B = unrotatedY - y1;
         const C = x2 - x1; // Vector of the line segment path
         const D = y2 - y1;
 
@@ -1242,9 +1418,9 @@ export class Game {
           yy = y1 + param * D;
         }
 
-        const dx = x - xx;
-        const dy = y - yy;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+        const dx_hit = unrotatedX - xx;
+        const dy_hit = unrotatedY - yy;
+        const distance = Math.sqrt(dx_hit * dx_hit + dy_hit * dy_hit);
 
         // Define hit-test tolerance of 5 pixels (makes clicking line elements easier)
         if (distance < 5) {
@@ -1257,6 +1433,7 @@ export class Game {
         }
       }
     }
+
     return null;
   };
 
@@ -1267,11 +1444,33 @@ export class Game {
   initHandlers = () => {
     this.ws.onmessage = (e) => {
       const data = JSON.parse(e.data);
-      
+
       if (data.type == "joined_room") {
         this.users = data.curRoomUsers;
         this.myUserId = data.myUserId;
         this.onRoomJoined?.(data.myUserId, data.curRoomUsers);
+      }
+
+      // Room role was updated
+      if (data.type === "role_updated") {
+        const myUpdate = data.updates.find((u: any) => u.userId === this.myUserId);
+        if (myUpdate) {
+          const oldRole = this.myRole;
+          const newRole = myUpdate.role;
+          this.setMyRole(newRole);
+          this.onRoleChange?.(newRole);
+
+          if (newRole === "Viewer") {
+            this.selectedShape = null;
+            this.shapeSelectors = [];
+            this.rotateIconLocation = null;
+            this.clearCanvas();
+            this.triggerSelectionChange();
+            alert("Your role has been updated to Viewer. You can no longer edit this board.");
+          } else if (oldRole === "Viewer" && newRole !== "Viewer") {
+            alert(`Your role has been updated to ${newRole}. You can now edit the board!`);
+          }
+        }
       }
 
       // Remote user created a shape
@@ -1312,6 +1511,7 @@ export class Game {
           if (this.selectedShape && this.selectedShape.id === data.shapeId) {
             this.selectedShape = null;
             this.shapeSelectors = [];
+            this.rotateIconLocation = null;
             this.triggerSelectionChange();
           }
           this.clearCanvas();
@@ -1323,6 +1523,7 @@ export class Game {
         this.existingShapes = [];
         this.selectedShape = null;
         this.shapeSelectors = [];
+        this.rotateIconLocation = null;
         this.clearCanvas();
         this.triggerSelectionChange();
       }
@@ -1442,6 +1643,9 @@ export class Game {
       this.tempShapes.forEach((shape) => {
         this.ctx.save();
         if (shape.type === "rect") {
+          this.ctx.translate(shape.startX + shape.width / 2, shape.startY + shape.height / 2);
+          this.ctx.rotate(shape.angle ? shape.angle * (Math.PI / 180) : 0);
+          this.ctx.translate(-shape.startX - shape.width / 2, -shape.startY - shape.height / 2);
           if (shape.color) {
             this.ctx.strokeStyle = shape.color;
           }
@@ -1491,32 +1695,36 @@ export class Game {
       this.ctx.restore();
     }
 
+    if (this.rotateIconLocation && this.rotateImg) {
+      this.ctx.drawImage(this.rotateImg, this.rotateIconLocation.x, this.rotateIconLocation.y, 20, 20);
+    }
+
     // 3. Render all existing shapes loaded in memory
     if (this.existingShapes.length > 0) {
       this.existingShapes.forEach((shape) => {
         if (shape.id !== undefined && shape.id === this.editingTextShapeId) return;
         this.ctx.save();
+        const { centerX, centerY } = this.getShapeCenters(shape);
         if (shape.type === "rect") {
+          this.ctx.translate(centerX, centerY);
+          this.ctx.rotate((shape.angle || 0) * Math.PI / 180);
           if (shape.color) {
             this.ctx.strokeStyle = shape.color;
           }
           if (shape.bg_color) {
             this.ctx.fillStyle = shape.bg_color;
-            this.ctx.fillRect(shape.startX, shape.startY, shape.width, shape.height);
+            this.ctx.fillRect(-shape.width / 2, -shape.height / 2, shape.width, shape.height);
           }
-          this.ctx.strokeRect(
-            shape.startX,
-            shape.startY,
-            shape.width,
-            shape.height
-          );
+          this.ctx.strokeRect(-shape.width / 2, -shape.height / 2, shape.width, shape.height);
         } else if (shape.type === "line") {
+          this.ctx.translate(centerX, centerY);
+          this.ctx.rotate((shape.angle || 0) * Math.PI / 180);
           if (shape.color) {
             this.ctx.strokeStyle = shape.color;
           }
           this.ctx.beginPath();
-          this.ctx.moveTo(shape.startX, shape.startY);
-          this.ctx.lineTo(shape.endX, shape.endY);
+          this.ctx.moveTo(shape.startX - centerX, shape.startY - centerY);
+          this.ctx.lineTo(shape.endX - centerX, shape.endY - centerY);
           this.ctx.stroke();
         } else if (shape.type === "circle") {
           if (shape.color) {
@@ -1536,21 +1744,27 @@ export class Game {
           }
           this.ctx.stroke();
         } else if (shape.type === "image") {
+          const centerX = shape.startX + shape.width / 2
+          const centerY = shape.startY + shape.height / 2
+
+          this.ctx.translate(centerX, centerY);
+          this.ctx.rotate((shape.angle || 0) * Math.PI / 180);
+
           if (shape.url) {
             const img = this.getImage(shape.url);
             if (img) {
-              this.ctx.drawImage(img, shape.startX, shape.startY, shape.width, shape.height);
+              this.ctx.drawImage(img, -shape.width / 2, -shape.height / 2, shape.width, shape.height);
             } else {
               this.ctx.setLineDash([10, 5]);
-              this.ctx.strokeRect(shape.startX, shape.startY, shape.width, shape.height);
+              this.ctx.strokeRect(-shape.width / 2, -shape.height / 2, shape.width, shape.height);
             }
           } else {
             this.ctx.setLineDash([10, 5]);
-            this.ctx.strokeRect(shape.startX, shape.startY, shape.width, shape.height);
-            this.ctx.strokeRect(shape.startX + shape.width / 3, shape.startY + shape.height / 3, shape.width / 3, shape.height / 3);
+            this.ctx.strokeRect(-shape.width / 2, -shape.height / 2, shape.width, shape.height);
+            this.ctx.strokeRect(-shape.width / 6, -shape.height / 6, shape.width / 3, shape.height / 3);
             const img = this.getImage("/add-image.png");
             if (img) {
-              this.ctx.drawImage(img, shape.startX + shape.width / 3, shape.startY + shape.height / 3, shape.width / 3, shape.height / 3);
+              this.ctx.drawImage(img, -shape.width / 6, -shape.height / 6, shape.width / 3, shape.height / 3);
             }
           }
         } else if (shape.type === "text") {
@@ -1562,41 +1776,65 @@ export class Game {
         this.ctx.restore();
       });
 
+      // Draw connector line for the rotate handle
+      if (this.rotateIconLocation && this.selectedShape && (this.selectedShape.type === "rect" || this.selectedShape.type === "image" || this.selectedShape.type === "line")) {
+        const { centerX, centerY } = this.getShapeCenters(this.selectedShape);
+        const rad = (this.selectedShape.angle || 0) * Math.PI / 180;
+
+        let baseLocalX = 0;
+        let baseLocalY = 0;
+        let logoLocalX = 0;
+        let logoLocalY = 0;
+
+        if (this.selectedShape.type === "line") {
+          baseLocalX = 0;
+          baseLocalY = 0;
+          logoLocalX = 0;
+          logoLocalY = -40;
+        } else {
+          // rect or image
+          baseLocalX = 0;
+          baseLocalY = -this.selectedShape.height / 2;
+          logoLocalX = 0;
+          logoLocalY = -this.selectedShape.height / 2 - 40;
+        }
+
+        const baseWorldX = centerX + baseLocalX * Math.cos(rad) - baseLocalY * Math.sin(rad);
+        const baseWorldY = centerY + baseLocalX * Math.sin(rad) + baseLocalY * Math.cos(rad);
+
+        const logoWorldX = centerX + logoLocalX * Math.cos(rad) - logoLocalY * Math.sin(rad);
+        const logoWorldY = centerY + logoLocalX * Math.sin(rad) + logoLocalY * Math.cos(rad);
+
+        this.ctx.save();
+        this.ctx.beginPath();
+        this.ctx.moveTo(baseWorldX, baseWorldY);
+        this.ctx.lineTo(logoWorldX, logoWorldY);
+        this.ctx.strokeStyle = "#4f46e5"; // Indigo connector line
+        this.ctx.lineWidth = 1.5;
+        this.ctx.setLineDash([5, 3]); // Dashed line
+        this.ctx.stroke();
+        this.ctx.restore();
+      }
+
       // 4. Render control handles overlay if a shape is selected in pointer mode
       if (this.shapeSelectors.length > 0 && this.selectedShape) {
+        this.ctx.save();
         this.shapeSelectors.forEach((selector) => {
-          if (this.selectedShape?.type === "circle") {
-            this.ctx.beginPath();
-            this.ctx.arc(
-              selector.centerX,
-              selector.centerY,
-              selector.radius,
-              0,
-              2 * Math.PI
-            );
-            this.ctx.stroke();
-          } else if (this.selectedShape?.type === "rect" || this.selectedShape?.type === "image") {
-            this.ctx.beginPath();
-            this.ctx.arc(
-              selector.centerX,
-              selector.centerY,
-              selector.radius,
-              0,
-              2 * Math.PI
-            );
-            this.ctx.stroke();
-          } else if (this.selectedShape?.type === "line") {
-            this.ctx.beginPath();
-            this.ctx.arc(
-              selector.centerX,
-              selector.centerY,
-              selector.radius,
-              0,
-              2 * Math.PI
-            );
-            this.ctx.stroke();
-          }
+          this.ctx.beginPath();
+          this.ctx.arc(
+            selector.centerX,
+            selector.centerY,
+            selector.radius,
+            0,
+            2 * Math.PI
+          );
+          this.ctx.fillStyle = "#ffffff";
+          this.ctx.fill();
+          this.ctx.strokeStyle = "#4f46e5"; // Indigo border
+          this.ctx.lineWidth = 1.5;
+          this.ctx.stroke();
         });
+        this.ctx.restore();
       }
     }
   };

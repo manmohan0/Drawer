@@ -1,6 +1,8 @@
 import { roomSchema } from "@repo/common/types";
 import { prismaClient } from "@repo/db/db";
 import { Request, Response } from "express";
+import roles from "../config/roles.js";
+import { RedisManager } from "../config/RedisManager.js";
 
 export const getMyRooms = async (req: Request, res: Response) => {
   try {
@@ -172,9 +174,16 @@ export const getChatsBySlug = async (req: Request, res: Response) => {
         },
       },
     });
+
     if (!room) {
       res.status(404).json({ message: "Room not found" });
       return;
+    }
+
+    const myRole = room.roomUsers.find((ru) => ru.userId === req.userId)?.role;
+
+    if (!myRole) {
+      return res.status(403).json({ success: false, message: "You cannot join the room because role not found" });
     }
 
     const owners = room.roomUsers.filter((ru) => ru.role === "Owner").map((ru) => ru.user)[0];
@@ -186,7 +195,7 @@ export const getChatsBySlug = async (req: Request, res: Response) => {
       admin: owners,
     };
 
-    res.status(200).json({ room: mappedRoom });
+    res.status(200).json({ room: mappedRoom, myRole });
   } catch (e) {
     res.status(500).json({ message: "Failed to retrieve room" });
   }
@@ -280,8 +289,137 @@ export const getRoomMembersAndData = async (req: Request, res: Response) => {
       })),
     };
 
-    res.status(200).json({ success: true, room: mappedRoom });
+    res.status(200).json({ success: true, room: mappedRoom, currentUserId: req.userId });
   } catch (e) {
     res.status(500).json({ message: "Failed to retrieve room" });
+  }
+};
+
+export const updateRole = async (req: Request, res: Response) => {
+  try {
+    const { role, userId } = req.body;
+    const { slug } = req.params;
+    const myUserId = req.userId;
+
+    if (userId === myUserId) {
+      return res.status(403).json({ success: false, message: "You cannot update your own role" })
+    }
+
+    const room = await prismaClient.room.findUnique({
+      where: {
+        slug: Number(slug)
+      }
+    });
+
+    if (!room) {
+      return res.status(404).json({ success: false, message: "Room not found" });
+    }
+
+    const myRoomUser = await prismaClient.roomUser.findUnique({
+      where: {
+        roomId_userId: {
+          roomId: room.id,
+          userId: myUserId as string
+        }
+      }
+    });
+
+    if (!myRoomUser) {
+      return res.status(403).json({ success: false, message: "You aren't member of this room" });
+    }
+
+    const roomUser = await prismaClient.roomUser.findUnique({
+      where: {
+        roomId_userId: {
+          roomId: room.id,
+          userId: userId
+        }
+      }
+    });
+
+    if (!roomUser) {
+      return res.status(404).json({ success: false, message: "User does not exist or isn't member of this room" });
+    }
+
+    if (roomUser.role === role) {
+      return res.status(403).json({ success: false, message: "Updated role should be different than current" });
+    }
+
+    const myRole = roles[myRoomUser.role];
+    const roleValue = roles[role as string];
+    const userRoleValue = roles[roomUser.role];
+
+    if ((myRole as number) <= (userRoleValue as number)) {
+      return res.status(403).json({ success: false, message: "You don't have permission to update role" });
+    }
+
+    if ((myRole as number) < (roleValue as number) || (myRoomUser.role !== "Owner" && (myRole as number) <= (roleValue as number))) {
+      return res.status(403).json({ success: false, message: "You can't update role to higher than or equal to yours" });
+    }
+
+    if (role === "Owner") {
+      await prismaClient.$transaction([
+        prismaClient.roomUser.update({
+          where: {
+            roomId_userId: {
+              roomId: room.id,
+              userId: myUserId as string
+            }
+          },
+          data: {
+            role: "Editor"
+          }
+        }),
+        prismaClient.roomUser.update({
+          where: {
+            roomId_userId: {
+              roomId: room.id,
+              userId: userId
+            }
+          },
+          data: {
+            role: "Owner"
+          }
+        })
+      ])
+    } else {
+      // Perform database update
+      await prismaClient.roomUser.update({
+        where: {
+          roomId_userId: {
+            roomId: room.id,
+            userId: userId
+          }
+        },
+        data: {
+          role: role as any
+        }
+      });
+    }
+
+    // Publish role update to Redis channel room${slug} so ws-backend broadcasts it to all connected users
+    try {
+      const redisClient = RedisManager.getInstance().getClient();
+      const updates = [{ userId, role }];
+      if (role === "Owner") {
+        updates.push({ userId: myUserId as string, role: "Editor" });
+      }
+      await redisClient.publish(
+        `room${slug}`,
+        JSON.stringify({
+          type: "role_updated",
+          roomId: slug,
+          updates,
+        })
+      );
+    } catch (redisError) {
+      console.error("Failed to publish role update to Redis:", redisError);
+    }
+
+    return res.status(200).json({ success: true, message: "Role updated successfully" });
+
+  } catch (e) {
+    console.log(`Error: ${e}`);
+    return res.status(500).json({ success: false, message: "Internal server error" });
   }
 }

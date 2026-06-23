@@ -1,8 +1,8 @@
 import { BACKEND_URL } from "@/config";
 import { Game } from "@/Draw/Game";
-import { Shape, ShapeType } from "@/types";
+import { role, Shape, ShapeType } from "@/types";
 import axios from "axios";
-import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2, PaintBucket, ArrowUp, ArrowDown, Type, LogOut, ChevronDown, Folder } from "lucide-react";
+import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2, PaintBucket, ArrowUp, ArrowDown, Type, LogOut, ChevronDown, Folder, Eye } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getCookie, deleteCookie } from "@/utils/cookie";
@@ -16,6 +16,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<any | null>(null);
   const [myUserName, setMyUserName] = useState<string>("Account");
+  const [myRole, setMyRoleState] = useState<role | null>(null);
 
   const fetchRooms = async () => {
     setRoomsLoading(true);
@@ -54,7 +55,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
           withCredentials: true,
         });
         if (res.data && res.data.room) {
-          console.log(res.data)
+          console.log(res.data);
+          setMyRoleState(res.data.myRole);
           setCurrentRoom(res.data.room);
         }
       } catch (err) {
@@ -83,6 +85,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
 
   const [game, setGame] = useState<Game>();
   const [tool, setTool] = useState<ShapeType>("rect");
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const [selectedShape, setSelectedShape] = useState<Shape | null>(null);
   const [prompt, setPrompt] = useState<string>("");
   const [tempShapes, setTempShapes] = useState<Shape[]>([]);
@@ -98,6 +101,13 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
     onCancel: () => void; 
   } | null>(null);
 
+  
+  useEffect(() => {
+    if (game && myRole) {
+      game.setMyRole(myRole);
+    }
+  }, [game, myRole]);
+  
   const handlePromptSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim() || loading) return;
@@ -169,6 +179,14 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       const game = new Game(canvas, roomId, ws, (shape) => {
         setSelectedShape(shape);
       });
+      
+      game.onMouseMove = (x, y) => {
+        setMousePos({ x, y });
+      };
+
+      game.onRoleChange = (newRole) => {
+        setMyRoleState(newRole);
+      };
       
       game.onRoomJoined = (myUserId, users) => {
         const user = users[myUserId];
@@ -328,8 +346,20 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
         ref={canvasRef}
         width={4320}
         height={2160}
+        onMouseLeave={() => setMousePos(null)}
         className="bg-[radial-gradient(circle_at_center,#73737330_2px,transparent_1px)] bg-white bg-size-[20px_20px] border-2 border-black"
       ></canvas>
+
+      {/* Mouse coordinates indicator */}
+      {mousePos && (
+        <div className="absolute bottom-4 left-4 z-50 bg-white/90 backdrop-blur-md border border-gray-200/60 shadow-xl rounded-xl px-3.5 py-1.5 text-[11px] font-bold text-gray-700 font-mono tracking-wide pointer-events-none select-none flex items-center space-x-2">
+          <span className="text-gray-400">X:</span>
+          <span>{mousePos.x}</span>
+          <span className="text-gray-300">|</span>
+          <span className="text-gray-400">Y:</span>
+          <span>{mousePos.y}</span>
+        </div>
+      )}
 
       {/* Shape details card */}
       {details && (
@@ -370,7 +400,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                         type="number"
                         value={metric.value}
                         onChange={(e) => handleMetricChange(metric.key!, e.target.value)}
-                        className="text-xs font-semibold text-gray-700 bg-transparent border-b border-dashed border-gray-300 hover:border-indigo-400 focus:border-indigo-500 focus:outline-none w-full py-0.5"
+                        disabled={myRole === "Viewer"}
+                        className="text-xs font-semibold text-gray-700 bg-transparent border-b border-dashed border-gray-300 hover:border-indigo-400 focus:border-indigo-500 focus:outline-none w-full py-0.5 disabled:opacity-75 disabled:cursor-not-allowed"
                       />
                       <span className="text-[10px] text-gray-400">px</span>
                     </div>
@@ -393,12 +424,13 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                 {/* Border Color */}
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-600 font-medium">Border Color</span>
-                  <div className="relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group shadow-sm">
+                  <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors shadow-sm ${myRole === "Viewer" ? "cursor-not-allowed opacity-50" : "cursor-pointer group"}`}>
                     <input
                       type="color"
                       value={selectedShape.color || "#000000"}
                       onChange={(e) => handleColorChange("color", e.target.value)}
-                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                      disabled={myRole === "Viewer"}
+                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10 disabled:cursor-not-allowed"
                     />
                     <div 
                       className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
@@ -415,20 +447,22 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                       {/* Transparent toggler */}
                       <button
                         onClick={() => handleColorChange("bg_color", "")}
+                        disabled={myRole === "Viewer"}
                         className={`px-2 py-1 text-[10px] font-semibold border rounded-lg transition-all ${
                           !selectedShape.bg_color 
                             ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm"
                             : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
-                        }`}
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         Transparent
                       </button>
-                      <div className="relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer group shadow-sm">
+                      <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors shadow-sm ${myRole === "Viewer" ? "cursor-not-allowed opacity-50" : "cursor-pointer group"}`}>
                         <input
                           type="color"
                           value={selectedShape.bg_color || "#ffffff"}
                           onChange={(e) => handleColorChange("bg_color", e.target.value)}
-                          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+                          disabled={myRole === "Viewer"}
+                          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10 disabled:cursor-not-allowed"
                         />
                         <div 
                           className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
@@ -472,70 +506,81 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
             </div>
 
             {/* Layering Actions */}
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                onClick={() => game?.bringForward()}
-                className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
-              >
-                <ArrowUp className="w-3.5 h-3.5" />
-                <span>Bring Forward</span>
-              </button>
-              <button
-                onClick={() => game?.sendBackward()}
-                className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
-              >
-                <ArrowDown className="w-3.5 h-3.5" />
-                <span>Send Backward</span>
-              </button>
-            </div>
+            {myRole !== "Viewer" && (
+              <>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    onClick={() => game?.bringForward()}
+                    className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                    <span>Bring Forward</span>
+                  </button>
+                  <button
+                    onClick={() => game?.sendBackward()}
+                    className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                    <span>Send Backward</span>
+                  </button>
+                </div>
 
-            {/* Actions */}
-            <button
-              onClick={() => game?.deleteSelectedShape()}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-100 hover:border-red-200 text-red-600 hover:text-red-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete Shape</span>
-            </button>
+                {/* Actions */}
+                <button
+                  onClick={() => game?.deleteSelectedShape()}
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-100 hover:border-red-200 text-red-600 hover:text-red-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Shape</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 border shadow-md rounded-2xl flex space-x-2 p-2 justify-center bg-gray-200 items-center">
-        {types.map((type) => (
-          <div
-            key={type.name}
-            onClick={() => onTypeChange(type.name as ShapeType)}
-            className={`cursor-pointer px-2 py-1 ${tool === type.name ? "text-orange-500" : "text-gray-400"} hover:bg-gray-100 rounded`}
-          >
-            {type.logo}
+      {myRole === "Viewer" ? (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-md border border-gray-200/50 shadow-lg rounded-2xl px-5 py-2.5 flex items-center space-x-2 text-xs font-bold text-gray-500 select-none tracking-wide">
+          <Eye className="w-4 h-4 text-orange-500" />
+          <span>VIEWER MODE (READ-ONLY)</span>
+        </div>
+      ) : (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 border shadow-md rounded-2xl flex space-x-2 p-2 justify-center bg-gray-200 items-center">
+          {types.map((type) => (
+            <div
+              key={type.name}
+              onClick={() => onTypeChange(type.name as ShapeType)}
+              className={`cursor-pointer px-2 py-1 ${tool === type.name ? "text-orange-500" : "text-gray-400"} hover:bg-gray-100 rounded`}
+            >
+              {type.logo}
+            </div>
+          ))}
+
+          {/* Divider */}
+          <div className="h-6 w-px bg-gray-300 self-center"></div>
+
+          {/* Color picker */}
+          <div className="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-colors cursor-pointer group">
+            <input
+              type="color"
+              value={color}
+              onChange={(e) => onColorChange(e.target.value)}
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+            />
+            <div 
+              className="w-5 h-5 rounded-full border border-white shadow-sm transition-transform duration-200 group-hover:scale-110"
+              style={{ backgroundColor: color }}
+            />
           </div>
-        ))}
 
-        {/* Divider */}
-        <div className="h-6 w-px bg-gray-300 self-center"></div>
-
-        {/* Color picker */}
-        <div className="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-colors cursor-pointer group">
-          <input
-            type="color"
-            value={color}
-            onChange={(e) => onColorChange(e.target.value)}
-            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
-          />
-          <div 
-            className="w-5 h-5 rounded-full border border-white shadow-sm transition-transform duration-200 group-hover:scale-110"
-            style={{ backgroundColor: color }}
-          />
+          <div
+            onClick={clearCanvas}
+            className="cursor-pointer px-2 py-1 text-gray-400 hover:bg-gray-100 rounded"
+          >
+            Clear
+          </div>
         </div>
-
-        <div
-          onClick={clearCanvas}
-          className="cursor-pointer px-2 py-1 text-gray-400 hover:bg-gray-100 rounded"
-        >
-          Clear
-        </div>
-      </div>
+      )}
 
       {/* Profile menu */}
       <div className="absolute top-4 right-4 z-50" ref={dropdownRef}>
@@ -724,32 +769,34 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       </div>
 
       {/* AI Request Input Bar */}
-      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-lg px-4 sm:px-0">
-        <form 
-          onSubmit={handlePromptSubmit} 
-          className="flex items-center space-x-2 bg-white/90 backdrop-blur-md border border-gray-200/50 shadow-2xl rounded-2xl p-1.5 transition-all duration-300 hover:shadow-indigo-100/40 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100"
-        >
-          <input
-            type="text"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            disabled={loading}
-            placeholder={loading ? "AI is thinking and drawing..." : "Ask AI to draw something... (e.g. 'draw a red circle')"}
-            className="flex-1 bg-transparent border-none outline-none pl-3 text-sm text-gray-800 placeholder-gray-400 py-2 w-full focus:ring-0 disabled:text-gray-400"
-          />
-          <button
-            type="submit"
-            disabled={!prompt.trim() || loading}
-            className="flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-100 text-white disabled:text-gray-400 p-2.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer shadow-md disabled:shadow-none"
+      {myRole !== "Viewer" && (
+        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-lg px-4 sm:px-0">
+          <form 
+            onSubmit={handlePromptSubmit} 
+            className="flex items-center space-x-2 bg-white/90 backdrop-blur-md border border-gray-200/50 shadow-2xl rounded-2xl p-1.5 transition-all duration-300 hover:shadow-indigo-100/40 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100"
           >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4" />
-            )}
-          </button>
-        </form>
-      </div>
+            <input
+              type="text"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              disabled={loading}
+              placeholder={loading ? "AI is thinking and drawing..." : "Ask AI to draw something... (e.g. 'draw a red circle')"}
+              className="flex-1 bg-transparent border-none outline-none pl-3 text-sm text-gray-800 placeholder-gray-400 py-2 w-full focus:ring-0 disabled:text-gray-400"
+            />
+            <button
+              type="submit"
+              disabled={!prompt.trim() || loading}
+              className="flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-100 text-white disabled:text-gray-400 p-2.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer shadow-md disabled:shadow-none"
+            >
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Inline Text Editor Overlay */}
       {textEditState && (

@@ -35,7 +35,7 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
         
         setSuccess("Signed in successfully! Redirecting...");
         setTimeout(() => {
-          router.push("/");
+          router.push("/rooms");
         }, 1500);
       } else {
         await axios.post(

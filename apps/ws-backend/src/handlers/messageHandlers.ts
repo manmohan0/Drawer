@@ -13,6 +13,25 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       user.rooms.push(data.roomId);
     }
 
+    // Fetch and cache the joining user's role in this room
+    try {
+      const slugNum = Number(data.roomId);
+      if (!isNaN(slugNum)) {
+        const dbRoomUser = await prismaClient.roomUser.findFirst({
+          where: {
+            room: { slug: slugNum },
+            userId: userId
+          }
+        });
+        if (dbRoomUser && user) {
+          if (!user.roles) user.roles = {};
+          user.roles[data.roomId] = dbRoomUser.role;
+        }
+      }
+    } catch (dbError) {
+      console.error("Failed to query and cache roomUser role:", dbError);
+    }
+
     let members = roomMembers[`room${data.roomId}`];
     if (!members) {
       members = [];
@@ -20,6 +39,22 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       console.log("Subscribing to Redis channel for room:", data.roomId);
       RedisManager.getInstance().getSubClient().subscribe(`room${data.roomId}`, (redisMessage) => {
         console.log("Redis broadcast to room:", data.roomId);
+        try {
+          const parsed = JSON.parse(redisMessage);
+          if (parsed.type === "role_updated") {
+            // Update in-memory cached roles
+            parsed.updates.forEach((up: any) => {
+              const targetUser = users.find((u) => u.userId === up.userId);
+              if (targetUser) {
+                if (!targetUser.roles) targetUser.roles = {};
+                targetUser.roles[parsed.roomId] = up.role;
+              }
+            });
+          }
+        } catch (e) {
+          console.error("Failed to process role update in Redis subscription:", e);
+        }
+
         const activeMembers = roomMembers[`room${data.roomId}`];
         activeMembers?.forEach((socket) => {
           socket.send(redisMessage);
@@ -98,6 +133,11 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
 
 
   } else if (data.type === "chat") {
+    const user = users.find((u) => u.ws === ws);
+    if (user?.roles?.[data.roomId] === "Viewer") {
+      console.warn(`User ${userId} is a Viewer. Shape creation blocked.`);
+      return;
+    }
     try {
       const room = await prismaClient.room.findUnique({
         where: { slug: Number(data.roomId) }
@@ -135,6 +175,11 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       console.error("Failed to create shape:", e);
     }
   } else if (data.type === "chat-multiple") {
+    const user = users.find((u) => u.ws === ws);
+    if (user?.roles?.[data.roomId] === "Viewer") {
+      console.warn(`User ${userId} is a Viewer. Shapes creation blocked.`);
+      return;
+    }
     try {
       const room = await prismaClient.room.findUnique({
         where: { slug: Number(data.roomId) }
@@ -178,6 +223,11 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       console.error("Failed to create shapes:", e);
     }
   } else if (data.type === "clear") {
+    const user = users.find((u) => u.ws === ws);
+    if (user?.roles?.[data.roomId] === "Viewer") {
+      console.warn(`User ${userId} is a Viewer. Clear board blocked.`);
+      return;
+    }
     try {
       const room = await prismaClient.room.findUnique({
         where: { slug: Number(data.roomId) }
@@ -204,6 +254,12 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       console.error("Internal server error during clear: ", e);
     }
   } else if (data.type === "update_shape") {
+    const user = users.find((u) => u.ws === ws);
+    const targetRoomId = data.roomId || data.room;
+    if (user?.roles?.[targetRoomId] === "Viewer") {
+      console.warn(`User ${userId} is a Viewer. Shape update blocked.`);
+      return;
+    }
     const shapeId = Number(data.shapeId);
     const roomId = data.roomId || data.room;
 
@@ -227,6 +283,12 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       console.error("Failed to update shape:", e);
     }
   } else if (data.type === "delete_shape") {
+    const user = users.find((u) => u.ws === ws);
+    const targetRoomId = data.roomId || data.room;
+    if (user?.roles?.[targetRoomId] === "Viewer") {
+      console.warn(`User ${userId} is a Viewer. Shape deletion blocked.`);
+      return;
+    }
     const shapeId = Number(data.shapeId);
     const roomId = data.roomId || data.room;
 
