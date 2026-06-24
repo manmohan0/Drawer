@@ -9,6 +9,12 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
 
   if (data.type === "join_room") {
     const user = users.find((u) => u.ws === ws);
+
+    if (!user) {
+      ws.send(JSON.stringify({ type: "join_room_failder" }));
+      return
+    }
+
     if (user && !user.rooms.includes(data.roomId)) {
       user.rooms.push(data.roomId);
     }
@@ -102,6 +108,16 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
           };
         });
     }
+    
+    const payload = {
+      canvasStartX: data.canvasStartX ?? 0,
+      canvasStartY: data.canvasStartY ?? 0,
+      canvasEndX: data.canvasEndX ?? -1,
+      canvasEndY: data.canvasEndY ?? -1
+    }
+
+    RedisManager.getInstance().getClient().hSet(`room${data.roomId}:coordinates`, user.userId, JSON.stringify(payload))
+      .catch((err) => console.error("Failed to set coordinates in Redis on join:", err));
     // Send joined_room confirmation only to the joining user
     ws.send(
       JSON.stringify({
@@ -128,6 +144,9 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
         }
       }
       user.rooms = user.rooms.filter((r) => r !== roomId);
+      RedisManager.getInstance().getClient().hDel(`room${roomId}:coordinates`, user.userId).catch((err) => {
+        console.error("Failed to delete coordinates in Redis on leave_room:", err);
+      });
     }
     ws.send(JSON.stringify({ type: "left_room", room: roomId }));
 
@@ -307,7 +326,34 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
     } catch (e) {
       console.error("Failed to delete the shape:", e);
     }
-  } else {
+  } else if (data.type === "change_screen_coordinates") {
+    const user = users.find(u => u.ws === ws);
+
+    if (!user) {
+      ws.send(JSON.stringify({}))
+      return;
+    }
+
+    const roomId = data.roomId;
+
+    const payload = {
+      canvasStartX: data.canvasStartX,
+      canvasStartY: data.canvasStartY,
+      canvasEndX: data.canvasEndX,
+      canvasEndY: data.canvasEndY
+    }
+
+    RedisManager.getInstance().getClient().hSet(`room${roomId}:coordinates`, user.userId, JSON.stringify(payload));
+  } else if (data.type === "get_screen_coordinates") {
+    const roomId = data.roomId;
+    const userCoordinates = await RedisManager.getInstance().getClient().hGet(`room${roomId}:coordinates`, data.userId);
+    if (!userCoordinates) {
+      ws.send(JSON.stringify({ type: "get_screen_coordinates_fail" }));
+      return;
+    }
+    ws.send(JSON.stringify({ type: "coordinates_received", coordinates: JSON.parse(userCoordinates) }));
+  }
+  else {
     console.warn("Unknown event type received:", data.type);
   }
 };

@@ -144,9 +144,15 @@ wss.on("connection", async (ws, req) => {
     if (userIndex !== -1) {
       const user = users[userIndex];
 
-      user?.rooms.forEach(room => {
+      user?.rooms.forEach(async room => {
         const roomKey = `room${room}`
         const member = roomMembers[roomKey]
+
+        try {
+          await RedisManager.getInstance().getClient().hDel(`room${room}:coordinates`, user.userId)
+        } catch (err) {
+          console.error(`Failed to delete coordinates from Redis on close for room ${room}:`, err);
+        }
 
         if (member) {
           const memberIndex = member.findIndex((m) => m === ws);
@@ -163,5 +169,6 @@ wss.on("connection", async (ws, req) => {
       })
       users.splice(userIndex, 1);
     }
+
   });
 });

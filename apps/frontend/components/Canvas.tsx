@@ -17,6 +17,10 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   const [currentRoom, setCurrentRoom] = useState<any | null>(null);
   const [myUserName, setMyUserName] = useState<string>("Account");
   const [myRole, setMyRoleState] = useState<role | null>(null);
+  const [myUserId, setMyUserId] = useState<string | null>(null);
+  const [activeUsers, setActiveUsers] = useState<Record<string, { firstName: string; lastName: string }>>({});
+  const [isShapeDetailsCollapsed, setIsShapeDetailsCollapsed] = useState(false);
+  const [isMembersListCollapsed, setIsMembersListCollapsed] = useState(false);
 
   const fetchRooms = async () => {
     setRoomsLoading(true);
@@ -189,10 +193,12 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       };
       
       game.onRoomJoined = (myUserId, users) => {
+        setMyUserId(myUserId);
         const user = users[myUserId];
         if (user) {
           setMyUserName(`${user.firstName} ${user.lastName}`.trim());
         }
+        setActiveUsers(users);
       };
       
       game.onStartTextEdit = (x, y, text, fontSize, onSave, onCancel) => {
@@ -360,182 +366,190 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
           <span>{mousePos.y}</span>
         </div>
       )}
-
       {/* Shape details card */}
       {details && (
         <div className="absolute top-4 left-4 z-50 w-72 bg-white/75 backdrop-blur-md border border-gray-200/50 shadow-2xl rounded-2xl overflow-hidden transition-all duration-300 transform scale-100 hover:shadow-indigo-100/30 animate-in fade-in duration-200">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/50">
+          <div className={`flex items-center justify-between px-4 py-3 bg-gray-50/50 select-none ${!isShapeDetailsCollapsed ? "border-b border-gray-100" : ""}`}>
             <div className="flex items-center space-x-2">
               {details.icon}
               <span className="font-semibold text-gray-800 tracking-wide text-sm">{details.title}</span>
             </div>
-            <div className="flex items-center space-x-1">
+            <div className="flex items-center space-x-2">
               <span className="text-[10px] text-gray-400 font-mono flex items-center bg-gray-100 px-1.5 py-0.5 rounded">
                 <Hash className="w-2.5 h-2.5 mr-0.5" />
                 {shapeId !== undefined ? shapeId : "Local"}
               </span>
+              <button
+                onClick={() => setIsShapeDetailsCollapsed(!isShapeDetailsCollapsed)}
+                className="p-1 text-gray-400 hover:text-indigo-500 rounded-lg transition-colors cursor-pointer"
+                title={isShapeDetailsCollapsed ? "Expand Details" : "Collapse Details"}
+              >
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isShapeDetailsCollapsed ? "" : "rotate-180"}`} />
+              </button>
             </div>
           </div>
 
           {/* Body */}
-          <div className="p-4 space-y-4">
-            {/* Grid of details */}
-            <div className="grid grid-cols-2 gap-3">
-              {details.metrics.map((metric, idx) => (
-                <div 
-                  key={idx} 
-                  className={`flex flex-col p-2 rounded-xl bg-gray-50/70 border border-gray-100 transition-all duration-200 hover:bg-white hover:border-indigo-100 hover:shadow-sm ${
-                    metric.label === "Area" || metric.label === "Length" || metric.label === "Circumference" || metric.label === "URL Status"
-                      ? "col-span-2" 
-                      : ""
-                  }`}
-                >
-                  <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-                    {metric.label}
-                  </span>
-                  {metric.editable && metric.key ? (
-                    <div className="flex items-center space-x-1 mt-0.5">
-                      <input
-                        type="number"
-                        value={metric.value}
-                        onChange={(e) => handleMetricChange(metric.key!, e.target.value)}
-                        disabled={myRole === "Viewer"}
-                        className="text-xs font-semibold text-gray-700 bg-transparent border-b border-dashed border-gray-300 hover:border-indigo-400 focus:border-indigo-500 focus:outline-none w-full py-0.5 disabled:opacity-75 disabled:cursor-not-allowed"
-                      />
-                      <span className="text-[10px] text-gray-400">px</span>
-                    </div>
-                  ) : (
-                    <span className="text-xs font-semibold text-gray-700 mt-0.5">
-                      {metric.value}
+          {!isShapeDetailsCollapsed && (
+            <div className="p-4 space-y-4">
+              {/* Grid of details */}
+              <div className="grid grid-cols-2 gap-3">
+                {details.metrics.map((metric, idx) => (
+                  <div 
+                    key={idx} 
+                    className={`flex flex-col p-2 rounded-xl bg-gray-50/70 border border-gray-100 transition-all duration-200 hover:bg-white hover:border-indigo-100 hover:shadow-sm ${
+                      metric.label === "Area" || metric.label === "Length" || metric.label === "Circumference" || metric.label === "URL Status"
+                        ? "col-span-2" 
+                        : ""
+                    }`}
+                  >
+                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                      {metric.label}
                     </span>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Colors Section */}
-            {selectedShape && (selectedShape.type === "rect" || selectedShape.type === "circle" || selectedShape.type === "line") && (
-              <div className="pt-3 border-t border-gray-100 space-y-3">
-                <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block">
-                  Colors
-                </span>
-                
-                {/* Border Color */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-600 font-medium">Border Color</span>
-                  <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors shadow-sm ${myRole === "Viewer" ? "cursor-not-allowed opacity-50" : "cursor-pointer group"}`}>
-                    <input
-                      type="color"
-                      value={selectedShape.color || "#000000"}
-                      onChange={(e) => handleColorChange("color", e.target.value)}
-                      disabled={myRole === "Viewer"}
-                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10 disabled:cursor-not-allowed"
-                    />
-                    <div 
-                      className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
-                      style={{ backgroundColor: selectedShape.color || "#000000" }}
-                    />
-                  </div>
-                </div>
-
-                {/* Fill Color (only for rect and circle) */}
-                {(selectedShape.type === "rect" || selectedShape.type === "circle") && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-600 font-medium">Fill Color</span>
-                    <div className="flex items-center space-x-2">
-                      {/* Transparent toggler */}
-                      <button
-                        onClick={() => handleColorChange("bg_color", "")}
-                        disabled={myRole === "Viewer"}
-                        className={`px-2 py-1 text-[10px] font-semibold border rounded-lg transition-all ${
-                          !selectedShape.bg_color 
-                            ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm"
-                            : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      >
-                        Transparent
-                      </button>
-                      <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors shadow-sm ${myRole === "Viewer" ? "cursor-not-allowed opacity-50" : "cursor-pointer group"}`}>
+                    {metric.editable && metric.key ? (
+                      <div className="flex items-center space-x-1 mt-0.5">
                         <input
-                          type="color"
-                          value={selectedShape.bg_color || "#ffffff"}
-                          onChange={(e) => handleColorChange("bg_color", e.target.value)}
+                          type="number"
+                          value={metric.value}
+                          onChange={(e) => handleMetricChange(metric.key!, e.target.value)}
                           disabled={myRole === "Viewer"}
-                          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10 disabled:cursor-not-allowed"
+                          className="text-xs font-semibold text-gray-700 bg-transparent border-b border-dashed border-gray-300 hover:border-indigo-400 focus:border-indigo-500 focus:outline-none w-full py-0.5 disabled:opacity-75 disabled:cursor-not-allowed"
                         />
-                        <div 
-                          className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
-                          style={{ backgroundColor: selectedShape.bg_color || "#ffffff" }}
-                        />
+                        <span className="text-[10px] text-gray-400">px</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-semibold text-gray-700 mt-0.5">
+                        {metric.value}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Colors Section */}
+              {selectedShape && (selectedShape.type === "rect" || selectedShape.type === "circle" || selectedShape.type === "line") && (
+                <div className="pt-3 border-t border-gray-100 space-y-3">
+                  <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block">
+                    Colors
+                  </span>
+                  
+                  {/* Border Color */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-600 font-medium">Border Color</span>
+                    <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors shadow-sm ${myRole === "Viewer" ? "cursor-not-allowed opacity-50" : "cursor-pointer group"}`}>
+                      <input
+                        type="color"
+                        value={selectedShape.color || "#000000"}
+                        onChange={(e) => handleColorChange("color", e.target.value)}
+                        disabled={myRole === "Viewer"}
+                        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10 disabled:cursor-not-allowed"
+                      />
+                      <div 
+                        className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
+                        style={{ backgroundColor: selectedShape.color || "#000000" }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Fill Color (only for rect and circle) */}
+                  {(selectedShape.type === "rect" || selectedShape.type === "circle") && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-600 font-medium">Fill Color</span>
+                      <div className="flex items-center space-x-2">
+                        {/* Transparent toggler */}
+                        <button
+                          onClick={() => handleColorChange("bg_color", "")}
+                          disabled={myRole === "Viewer"}
+                          className={`px-2 py-1 text-[10px] font-semibold border rounded-lg transition-all ${
+                            !selectedShape.bg_color 
+                              ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm"
+                              : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                          Transparent
+                        </button>
+                        <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors shadow-sm ${myRole === "Viewer" ? "cursor-not-allowed opacity-50" : "cursor-pointer group"}`}>
+                          <input
+                            type="color"
+                            value={selectedShape.bg_color || "#ffffff"}
+                            onChange={(e) => handleColorChange("bg_color", e.target.value)}
+                            disabled={myRole === "Viewer"}
+                            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10 disabled:cursor-not-allowed"
+                          />
+                          <div 
+                            className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
+                            style={{ backgroundColor: selectedShape.bg_color || "#ffffff" }}
+                          />
+                        </div>
                       </div>
                     </div>
+                  )}
+                </div>
+              )}
+
+              {/* Creator & Updater info */}
+              <div className="pt-3 border-t border-gray-100 flex flex-col gap-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center text-gray-500 space-x-1.5">
+                    <User className="w-3.5 h-3.5 text-gray-400" />
+                    <span>Created by:</span>
                   </div>
-                )}
+                  <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
+                    creatorName === "You" 
+                      ? "bg-indigo-50 text-indigo-600 border border-indigo-100" 
+                      : "bg-gray-100 text-gray-600"
+                  }`}>
+                    {creatorName || "Unknown"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center text-gray-500 space-x-1.5">
+                    <User className="w-3.5 h-3.5 text-gray-400" />
+                    <span>Updated by:</span>
+                  </div>
+                  <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
+                    updaterName === "You" 
+                      ? "bg-indigo-50 text-indigo-600 border border-indigo-100" 
+                      : "bg-gray-100 text-gray-600"
+                  }`}>
+                    {updaterName || creatorName || "Unknown"}
+                  </span>
+                </div>
               </div>
-            )}
 
-            {/* Creator & Updater info */}
-            <div className="pt-3 border-t border-gray-100 flex flex-col gap-2 text-xs">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center text-gray-500 space-x-1.5">
-                  <User className="w-3.5 h-3.5 text-gray-400" />
-                  <span>Created by:</span>
-                </div>
-                <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
-                  creatorName === "You" 
-                    ? "bg-indigo-50 text-indigo-600 border border-indigo-100" 
-                    : "bg-gray-100 text-gray-600"
-                }`}>
-                  {creatorName || "Unknown"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center text-gray-500 space-x-1.5">
-                  <User className="w-3.5 h-3.5 text-gray-400" />
-                  <span>Updated by:</span>
-                </div>
-                <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
-                  updaterName === "You" 
-                    ? "bg-indigo-50 text-indigo-600 border border-indigo-100" 
-                    : "bg-gray-100 text-gray-600"
-                }`}>
-                  {updaterName || creatorName || "Unknown"}
-                </span>
-              </div>
+              {/* Layering Actions */}
+              {myRole !== "Viewer" && (
+                <>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      onClick={() => game?.bringForward()}
+                      className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                      <span>Bring Forward</span>
+                    </button>
+                    <button
+                      onClick={() => game?.sendBackward()}
+                      className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                      <span>Send Backward</span>
+                    </button>
+                  </div>
+
+                  {/* Actions */}
+                  <button
+                    onClick={() => game?.deleteSelectedShape()}
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-100 hover:border-red-200 text-red-600 hover:text-red-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete Shape</span>
+                  </button>
+                </>
+              )}
             </div>
-
-            {/* Layering Actions */}
-            {myRole !== "Viewer" && (
-              <>
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <button
-                    onClick={() => game?.bringForward()}
-                    className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
-                  >
-                    <ArrowUp className="w-3.5 h-3.5" />
-                    <span>Bring Forward</span>
-                  </button>
-                  <button
-                    onClick={() => game?.sendBackward()}
-                    className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
-                  >
-                    <ArrowDown className="w-3.5 h-3.5" />
-                    <span>Send Backward</span>
-                  </button>
-                </div>
-
-                {/* Actions */}
-                <button
-                  onClick={() => game?.deleteSelectedShape()}
-                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-100 hover:border-red-200 text-red-600 hover:text-red-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete Shape</span>
-                </button>
-              </>
-            )}
-          </div>
+          )}
         </div>
       )}
 
@@ -730,6 +744,60 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
           </div>
         )}
       </div>
+
+      {/* Room Members Panel */}
+      {Object.keys(activeUsers).length > 0 && (
+        <div className={`absolute top-20 right-4 z-50 w-64 bg-white/80 backdrop-blur-md border border-gray-200/50 shadow-lg rounded-2xl p-4 flex flex-col transition-all duration-300 overflow-hidden hover:shadow-indigo-100/30 ${isMembersListCollapsed ? "max-h-[52px]" : "max-h-[300px]"}`}>
+          <div className={`flex items-center justify-between ${!isMembersListCollapsed ? "pb-2 border-b border-gray-100" : ""}`}>
+            <div className="flex items-center space-x-2">
+              <User className="w-4 h-4 text-orange-500" />
+              <span className="text-xs font-bold text-gray-700 tracking-wide">Room Members</span>
+            </div>
+            <button
+              onClick={() => setIsMembersListCollapsed(!isMembersListCollapsed)}
+              className="p-1 text-gray-400 hover:text-orange-500 rounded-lg transition-colors cursor-pointer"
+              title={isMembersListCollapsed ? "Expand Members" : "Collapse Members"}
+            >
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isMembersListCollapsed ? "" : "rotate-180"}`} />
+            </button>
+          </div>
+          {!isMembersListCollapsed && (
+            <div className="overflow-y-auto mt-2 space-y-1 flex-1 pr-1 scrollbar-thin">
+              {Object.entries(activeUsers).map(([uId, u]) => {
+                const name = `${u.firstName} ${u.lastName}`.trim();
+                const isMe = uId === myUserId;
+                return (
+                  <div key={uId} className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-50/80 transition-colors">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-[10px] font-bold select-none">
+                        {u.firstName[0] || ""}{u.lastName[0] || ""}
+                      </div>
+                      <span className="text-xs text-gray-700 font-medium truncate max-w-[130px]" title={name}>
+                        {name} {isMe && "(You)"}
+                      </span>
+                    </div>
+                    {!isMe && (
+                      <button
+                        onClick={() => {
+                          ws.send(JSON.stringify({
+                            type: "get_screen_coordinates",
+                            roomId,
+                            userId: uId
+                          }));
+                        }}
+                        className="p-1 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer"
+                        title="Locate member on canvas"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* AI Preview Controls & Error Messages */}
       <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-lg px-4 sm:px-0 flex flex-col items-center space-y-2 pointer-events-none">

@@ -1,7 +1,7 @@
 import { BACKEND_URL } from "@/config";
 import { role, selector, Shape, ShapeType } from "@/types";
 import axios from "axios";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Wind } from "lucide-react";
 
 const ROTATE_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`;
 
@@ -45,6 +45,7 @@ export class Game {
   private rotateIconLocation: { x: number, y: number } | null = null;
   private rotateImg: HTMLImageElement | null;
   private isRotating: boolean = false;
+  private focusAnimationId: number | null = null;
 
   // The specific selector handle being dragged, or null if not dragging any handle
   private draggedSelector: selector | null = null;
@@ -465,6 +466,48 @@ export class Game {
 
     // 9. Programmatically click the hidden input to open the native system file selector
     input.click();
+  };
+
+  focusOnCoordinates = (startX: number, startY: number, endX: number, endY: number) => {
+    if (this.focusAnimationId !== null) {
+      cancelAnimationFrame(this.focusAnimationId);
+    }
+
+    const targetCenterX = (startX + (endX - startX) / 2);
+    const targetCenterY = (startY + (endY - startY) / 2);
+
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+
+    const targetPanX = screenWidth / 2 - targetCenterX * this.zoom;
+    const targetPanY = screenHeight / 2 - targetCenterY * this.zoom;
+
+    const duration = 400; // milliseconds
+    const startTime = performance.now();
+    const startPanX = this.panX;
+    const startPanY = this.panY;
+
+    // Cubic easing out: smooth deceleration
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easedProgress = easeOutCubic(progress);
+
+      this.panX = startPanX + (targetPanX - startPanX) * easedProgress;
+      this.panY = startPanY + (targetPanY - startPanY) * easedProgress;
+
+      this.clearCanvas();
+
+      if (progress < 1) {
+        this.focusAnimationId = requestAnimationFrame(animate);
+      } else {
+        this.focusAnimationId = null;
+      }
+    };
+
+    this.focusAnimationId = requestAnimationFrame(animate);
   };
 
   private getShapeCenters = (shape: Shape) => {
@@ -1120,7 +1163,22 @@ export class Game {
    */
   keyboardUpHandler = (e: KeyboardEvent) => {
     if (e.key === ' ') {
+      
+      const  canvasStartX = -this.panX / this.zoom;
+      const  canvasStartY = -this.panY / this.zoom;
+      const  canvasEndX = (window.innerWidth - this.panX) / this.zoom;
+      const  canvasEndY = (window.innerHeight - this.panY) / this.zoom;
+
       this.isPan = false;
+      this.ws.send(JSON.stringify({
+        type: "change_screen_coordinates",
+        userId: this.myUserId,
+        roomId: this.roomId,
+        canvasStartX,
+        canvasStartY,
+        canvasEndX,
+        canvasEndY,
+      }))
     }
   };
 
@@ -1527,6 +1585,22 @@ export class Game {
         this.clearCanvas();
         this.triggerSelectionChange();
       }
+
+      if (data.type === "coordinates_received") {
+        const coords = data.coordinates;
+        if (coords) {
+          this.focusOnCoordinates(
+            coords.canvasStartX,
+            coords.canvasStartY,
+            coords.canvasEndX,
+            coords.canvasEndY
+          );
+        }
+      }
+
+      if (data.type === "get_screen_coordinates_fail") {
+        alert("Could not locate member. They might not be actively panning or are offline.");
+      }
     };
 
     // Send the join_room message after onmessage listener is registered to prevent race conditions
@@ -1534,6 +1608,8 @@ export class Game {
       JSON.stringify({
         type: "join_room",
         roomId: this.roomId,
+        canvasEndX: window.innerWidth,
+        canvasEndY: window.innerHeight,
       })
     );
   };
