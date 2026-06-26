@@ -1701,6 +1701,13 @@ export class Game {
         this.onRoomJoined?.(data.myUserId, data.curRoomUsers);
       }
 
+      // Kicked from room
+      if (data.type === "kicked") {
+        alert("You have been removed from this room by the owner.");
+        window.location.href = "/rooms";
+        return;
+      }
+
       // Room role was updated
       if (data.type === "role_updated") {
         const myUpdate = data.updates.find((u: any) => u.userId === this.myUserId);
@@ -2115,6 +2122,9 @@ export class Game {
   setReplayShapes = (replayShapes: Shape[] | null) => {
     this.replayShapes = replayShapes;
     this.clearCanvas();
+    this.selectedShape = null;
+    this.shapeSelectors = [];
+    this.rotateIconLocation = null;
   };
 
   /**

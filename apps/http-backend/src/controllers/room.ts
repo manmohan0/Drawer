@@ -462,3 +462,81 @@ export const getRoomEvents = async (req: Request, res: Response) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+export const removeUser = async (req: Request, res: Response) => {
+  const { userId } = req.body;
+  const { slug } = req.params;
+  const myUserId = req.userId;
+
+  if (userId === myUserId) {
+    return res.status(400).json({ success: false, message: "You cannot remove yourself from the room" });
+  }
+
+  try {
+    const room = await prismaClient.room.findUnique({
+      where: { slug: Number(slug) }
+    });
+
+    if (!room) {
+      return res.status(404).json({ success: false, message: "Room not found" });
+    }
+
+    // Check if the requester is the Owner
+    const myRoomUser = await prismaClient.roomUser.findUnique({
+      where: {
+        roomId_userId: {
+          roomId: room.id,
+          userId: myUserId as string
+        }
+      }
+    });
+
+    if (!myRoomUser || myRoomUser.role !== "Owner") {
+      return res.status(403).json({ success: false, message: "Only the room owner can remove users" });
+    }
+
+    // Check if the target user is a member of the room
+    const targetRoomUser = await prismaClient.roomUser.findUnique({
+      where: {
+        roomId_userId: {
+          roomId: room.id,
+          userId: userId
+        }
+      }
+    });
+
+    if (!targetRoomUser) {
+      return res.status(404).json({ success: false, message: "User is not a member of this room" });
+    }
+
+    // Delete the membership
+    await prismaClient.roomUser.delete({
+      where: {
+        roomId_userId: {
+          roomId: room.id,
+          userId: userId
+        }
+      }
+    });
+
+    // Publish to Redis channel so ws-backend can handle disconnection/cleanup
+    try {
+      const redisClient = RedisManager.getInstance().getClient();
+      await redisClient.publish(
+        `room${slug}`,
+        JSON.stringify({
+          type: "user_removed",
+          roomId: slug,
+          userId: userId
+        })
+      );
+    } catch (redisError) {
+      console.error("Failed to publish user removal to Redis:", redisError);
+    }
+
+    return res.status(200).json({ success: true, message: "User removed successfully" });
+  } catch (e) {
+    console.error("Failed to remove user:", e);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};

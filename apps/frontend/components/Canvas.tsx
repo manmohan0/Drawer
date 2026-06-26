@@ -2,7 +2,7 @@ import { BACKEND_URL } from "@/config";
 import { Game } from "@/Draw/Game";
 import { role, Shape, ShapeType } from "@/types";
 import axios from "axios";
-import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2, PaintBucket, ArrowUp, ArrowDown, Type, LogOut, ChevronDown, Folder, Eye, Play, Pause, SkipBack, SkipForward } from "lucide-react";
+import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2, PaintBucket, ArrowUp, ArrowDown, Type, LogOut, ChevronDown, Folder, Eye, Play, Pause, SkipBack, SkipForward, UserMinus } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getCookie, deleteCookie } from "@/utils/cookie";
@@ -264,6 +264,36 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
 
   const handleRejectShapes = () => {
     setTempShapes([]);
+  };
+
+  const handleRemoveUser = async (targetUserId: string) => {
+    if (myRole !== "Owner" || !currentRoom) return;
+
+    if (!confirm("Are you sure you want to remove this user from the room?")) {
+      return;
+    }
+
+    try {
+      const token = getCookie("Authorization");
+      const res = await axios.delete(`${BACKEND_URL}/room/${currentRoom.slug}/removeUser`, {
+        headers: {
+          Authorization: token
+        },
+        data: {
+          userId: targetUserId
+        },
+        withCredentials: true
+      });
+
+      if (res.data && res.data.success) {
+        // User kicked successfully
+      } else {
+        setError("Failed to remove user");
+      }
+    } catch (err: any) {
+      console.error("Failed to remove user:", err);
+      setError(err.response?.data?.message || "Failed to remove user");
+    }
   };
 
   const onColorChange = (newColor: string) => {
@@ -981,19 +1011,30 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                       </span>
                     </div>
                     {!isMe && (
-                      <button
-                        onClick={() => {
-                          ws.send(JSON.stringify({
-                            type: "get_screen_coordinates",
-                            roomId,
-                            userId: uId
-                          }));
-                        }}
-                        className="p-1 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer"
-                        title="Locate member on canvas"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => {
+                            ws.send(JSON.stringify({
+                              type: "get_screen_coordinates",
+                              roomId,
+                              userId: uId
+                            }));
+                          }}
+                          className="p-1 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer"
+                          title="Locate member on canvas"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        {myRole === "Owner" && (
+                          <button
+                            onClick={() => handleRemoveUser(uId)}
+                            className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Remove user from room"
+                          >
+                            <UserMinus className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 );

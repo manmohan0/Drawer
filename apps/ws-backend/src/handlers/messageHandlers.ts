@@ -58,9 +58,15 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
                 targetUser.roles[parsed.roomId] = up.role;
               }
             });
+          } else if (parsed.type === "user_removed") {
+            const targetUser = users.find((u) => u.userId === parsed.userId);
+            if (targetUser) {
+              targetUser.ws.send(JSON.stringify({ type: "kicked", roomId: parsed.roomId }));
+              targetUser.ws.close();
+            }
           }
         } catch (e) {
-          console.error("Failed to process role update in Redis subscription:", e);
+          console.error("Failed to process Redis message in subscription:", e);
         }
 
         const activeMembers = roomMembers[`room${data.roomId}`];
