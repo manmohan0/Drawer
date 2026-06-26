@@ -47,6 +47,7 @@ export class Game {
   private rotateImg: HTMLImageElement | null;
   private isRotating: boolean = false;
   private focusAnimationId: number | null = null;
+  private coordinateUpdateTimeout: any = null;
 
   // The specific selector handle being dragged, or null if not dragging any handle
   private draggedSelector: selector | null = null;
@@ -492,19 +493,33 @@ export class Game {
       cancelAnimationFrame(this.focusAnimationId);
     }
 
-    const targetCenterX = (startX + (endX - startX) / 2);
-    const targetCenterY = (startY + (endY - startY) / 2);
+    const targetWidth = endX - startX;
+    const targetHeight = endY - startY;
+
+    if (isNaN(targetWidth) || targetWidth <= 0 || isNaN(targetHeight) || targetHeight <= 0) {
+      return;
+    }
 
     const screenWidth = window.innerWidth;
     const screenHeight = window.innerHeight;
 
-    const targetPanX = screenWidth / 2 - targetCenterX * this.zoom;
-    const targetPanY = screenHeight / 2 - targetCenterY * this.zoom;
+    // Dynamically calculate target zoom level to fit the targeted viewport area, clamped within allowed bounds
+    const zoomX = screenWidth / targetWidth;
+    const zoomY = screenHeight / targetHeight;
+    const calculatedZoom = Math.min(zoomX, zoomY);
+    const targetZoom = Math.max(0.5, Math.min(5, calculatedZoom));
+
+    const targetCenterX = startX + targetWidth / 2;
+    const targetCenterY = startY + targetHeight / 2;
+
+    const targetPanX = screenWidth / 2 - targetCenterX * targetZoom;
+    const targetPanY = screenHeight / 2 - targetCenterY * targetZoom;
 
     const duration = 400; // milliseconds
     const startTime = performance.now();
     const startPanX = this.panX;
     const startPanY = this.panY;
+    const startZoom = this.zoom;
 
     // Cubic easing out: smooth deceleration
     const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
@@ -514,6 +529,7 @@ export class Game {
       const progress = Math.min(elapsed / duration, 1);
       const easedProgress = easeOutCubic(progress);
 
+      this.zoom = startZoom + (targetZoom - startZoom) * easedProgress;
       this.panX = startPanX + (targetPanX - startPanX) * easedProgress;
       this.panY = startPanY + (targetPanY - startPanY) * easedProgress;
 
@@ -523,10 +539,40 @@ export class Game {
         this.focusAnimationId = requestAnimationFrame(animate);
       } else {
         this.focusAnimationId = null;
+        this.updateScreenCoordinates();
       }
     };
 
     this.focusAnimationId = requestAnimationFrame(animate);
+  };
+
+  updateScreenCoordinates = () => {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+    const canvasStartX = -this.panX / this.zoom;
+    const canvasStartY = -this.panY / this.zoom;
+    const canvasEndX = (window.innerWidth - this.panX) / this.zoom;
+    const canvasEndY = (window.innerHeight - this.panY) / this.zoom;
+
+    this.ws.send(JSON.stringify({
+      type: "change_screen_coordinates",
+      userId: this.myUserId,
+      roomId: this.roomId,
+      canvasStartX,
+      canvasStartY,
+      canvasEndX,
+      canvasEndY,
+    }));
+  };
+
+  debouncedUpdateScreenCoordinates = () => {
+    if (this.coordinateUpdateTimeout) {
+      clearTimeout(this.coordinateUpdateTimeout);
+    }
+    this.coordinateUpdateTimeout = setTimeout(() => {
+      this.updateScreenCoordinates();
+      this.coordinateUpdateTimeout = null;
+    }, 300);
   };
 
   private getShapeCenters = (shape: Shape) => {
@@ -1335,6 +1381,7 @@ export class Game {
     this.panY = mouseScreenY - mouseWorldY * this.zoom;
 
     this.clearCanvas();
+    this.debouncedUpdateScreenCoordinates();
   };
 
   /**
@@ -1353,22 +1400,8 @@ export class Game {
    */
   keyboardUpHandler = (e: KeyboardEvent) => {
     if (e.key === ' ') {
-
-      const canvasStartX = -this.panX / this.zoom;
-      const canvasStartY = -this.panY / this.zoom;
-      const canvasEndX = (window.innerWidth - this.panX) / this.zoom;
-      const canvasEndY = (window.innerHeight - this.panY) / this.zoom;
-
       this.isPan = false;
-      this.ws.send(JSON.stringify({
-        type: "change_screen_coordinates",
-        userId: this.myUserId,
-        roomId: this.roomId,
-        canvasStartX,
-        canvasStartY,
-        canvasEndX,
-        canvasEndY,
-      }))
+      this.updateScreenCoordinates();
     }
   };
 
@@ -1699,6 +1732,7 @@ export class Game {
         this.users = data.curRoomUsers;
         this.myUserId = data.myUserId;
         this.onRoomJoined?.(data.myUserId, data.curRoomUsers);
+        this.updateScreenCoordinates();
       }
 
       // Kicked from room
@@ -1851,6 +1885,7 @@ export class Game {
     this.canvas.style.width = `${window.innerWidth}px`;
     this.canvas.style.height = `${window.innerHeight}px`;
     this.clearCanvas();
+    this.debouncedUpdateScreenCoordinates?.();
   };
 
   /**
@@ -2132,6 +2167,10 @@ export class Game {
    * Prevents memory leaks when the component mounts and unmounts in web applications.
    */
   destroy = () => {
+    if (this.coordinateUpdateTimeout) {
+      clearTimeout(this.coordinateUpdateTimeout);
+      this.coordinateUpdateTimeout = null;
+    }
     this.canvas.removeEventListener("mousedown", this.mouseDownHandler);
     this.canvas.removeEventListener("mousemove", this.mouseMoveHandler);
     this.canvas.removeEventListener("mouseup", this.mouseUpHandler);
