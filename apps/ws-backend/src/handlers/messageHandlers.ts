@@ -2,6 +2,8 @@ import { WebSocket } from "ws";
 import { prismaClient } from "@repo/db/db";
 import { roomMembers, users } from "../utils/inMemory.js";
 import { RedisManager } from "../config/RedisManager.js";
+import { appendRoomEvent } from "../utils/eventLogger.js";
+import { EventType } from "@repo/common/enum"
 
 export const selfMessageHandler = async (message: any, ws: WebSocket, userId: string) => {
   const userAuthenticated = { userId };
@@ -176,6 +178,22 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
         },
       });
 
+      if (shape) {
+        const shapeData = JSON.parse(data.shape);
+        const description = shapeData.type === "text"
+          ? `${user?.firstName} ${user?.lastName} created text "${shapeData.text || ""}"`
+          : `${user?.firstName} ${user?.lastName} created a ${shapeData.type}`;
+
+        await appendRoomEvent({
+          roomId: room.id,
+          userId: userAuthenticated.userId,
+          description: description,
+          shapeId: shape.id,
+          eventType: data.eventType || EventType.CREATE_SHAPE,
+          payload: data.shape
+        });
+      }
+
       const newShape = {
         id: shape.id,
         shape: JSON.parse(data.shape),
@@ -283,13 +301,76 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
     const roomId = data.roomId || data.room;
 
     try {
+      const existingShapeRecord = await prismaClient.shapes.findUnique({
+        where: { id: shapeId }
+      });
+
+      if (!existingShapeRecord) {
+        ws.send(JSON.stringify({ message: "shape not found" }));
+        return;
+      }
+
+      const existingShape = JSON.parse(existingShapeRecord.shape);
+      const incomingShape = typeof data.shape === "string" ? JSON.parse(data.shape) : data.shape;
+
+      const mergedShape = {
+        ...existingShape,
+        ...incomingShape
+      };
+
       const updatedShape = await prismaClient.shapes.update({
         where: { id: shapeId },
         data: {
-          shape: data.shape,
+          shape: JSON.stringify(mergedShape),
           updatedByUserId: userAuthenticated.userId
         },
       });
+
+      const room = await prismaClient.room.findUnique({
+        where: {
+          slug: Number(roomId)
+        }
+      })
+
+      if (!room) {
+        ws.send(JSON.stringify({ message: "room not found" }));
+        return;
+      }
+
+      if (updatedShape && data.eventType) {
+        let description;
+        const shape = JSON.parse(updatedShape.shape);
+        console.log(data)
+        switch (data.eventType) {
+          case EventType.ROTATE_SHAPE:
+            description = `${user?.firstName} ${user?.lastName} rotated a ${shape.type} from ${Math.round(data.fromAngle)} to ${Math.round(data.toAngle)} degrees of #${shape.shapeId}`
+            break;
+          case EventType.MOVE_SHAPE:
+            description = shape.type === "line" ? `${user?.firstName} ${user?.lastName} moved a ${shape.type} from start(${Math.round(data.fromStartX)}, ${Math.round(data.fromStartY)}), end(${Math.round(data.fromEndX)}, ${Math.round(data.fromEndY)}) to start(${Math.round(data.toStartX)}, ${Math.round(data.toStartY)}), end(${Math.round(data.toEndX)}, ${Math.round(data.toEndY)}) of #${shape.shapeId}` : `${user?.firstName} ${user?.lastName} moved a ${shape.type} from (${data.fromX}, ${data.fromY}) to (${data.toX}, ${data.toY}) of #${shape.shapeId}`
+            break;
+          case EventType.SCALE_SHAPE:
+            description = shape.type !== "circle" && shape.type !== "line" ? `${user?.firstName} ${user?.lastName} resized a ${shape.type} from (${Math.round(data.fromWidth)}, ${Math.round(data.fromHeight)}) to (${Math.round(data.toWidth)}, ${Math.round(data.toHeight)}) of #${shape.shapeId}` : shape.type === "line" ? `${user?.firstName} ${user?.lastName} resized a line from (${Math.round(data.fromStartX)}, ${Math.round(data.fromStartY)}) to (${Math.round(data.toEndX)}, ${Math.round(data.toEndY)}) of #${shape.shapeId}` : `${user?.firstName} ${user?.lastName} resized a ${shape.type} from radius ${Math.round(data.fromRadius)} to ${Math.round(data.toRadius)} of #${shape.shapeId}`
+            break;
+          case EventType.CHANGE_FILL:
+            description = `${user?.firstName} ${user?.lastName} changed the fill color of a ${shape.type} from ${data.fromColor} to ${data.toColor} of #${shape.shapeId}`
+            break;
+          case EventType.CHANGE_STROKE:
+            description = `${user?.firstName} ${user?.lastName} changed the ${shape.type === "text" ? "text" : "border"} color of a ${shape.type} from ${data.fromColor} to ${data.toColor} of #${shape.shapeId}`
+            break;
+          case EventType.CHANGE_LAYER:
+            description = `${user?.firstName} ${user?.lastName} changed the layer of a ${shape.type} from z-index ${Math.round(data.fromZ)} to ${Math.round(data.toZ)} of #${shape.shapeId}`
+            break;
+          case EventType.CHANGE_TEXT:
+            description = `${user?.firstName} ${user?.lastName} updated text from "${data.fromText}" to "${data.toText}" of #${shape.shapeId}`
+            break;
+          case EventType.ADD_IMAGE:
+            description = `${user?.firstName} ${user?.lastName} added an image of #${shape.shapeId}`
+            break;
+          default:
+            break;
+        }
+        await appendRoomEvent({ roomId: room.id, userId: userAuthenticated.userId, description: description, shapeId: updatedShape.id, eventType: data.eventType, payload: data.shape })
+      }
 
       const payload = {
         type: "shape_updated",
@@ -312,9 +393,23 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
     const roomId = data.roomId || data.room;
 
     try {
-      await prismaClient.shapes.delete({
+      const deletedShape = await prismaClient.shapes.delete({
         where: { id: shapeId },
       });
+
+      if (deletedShape) {
+        const description = `${user?.firstName} ${user?.lastName} deleted a ${JSON.parse(deletedShape.shape).type}`
+        const room = await prismaClient.room.findUnique({
+          where: {
+            id: deletedShape.roomId
+          }
+        })
+        if (!room) {
+          ws.send(JSON.stringify({ message: "room not found" }));
+          return;
+        }
+        await appendRoomEvent({ roomId: room.id, userId: userAuthenticated.userId, description: description, shapeId: deletedShape.id, eventType: EventType.DELETE_SHAPE, payload: deletedShape.shape })
+      }
 
       const payload = {
         type: "shape_deleted",
@@ -352,8 +447,7 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       return;
     }
     ws.send(JSON.stringify({ type: "coordinates_received", coordinates: JSON.parse(userCoordinates) }));
-  }
-  else {
+  } else {
     console.warn("Unknown event type received:", data.type);
   }
 };

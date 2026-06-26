@@ -1,6 +1,6 @@
 export type Shape = {
     id?: number;
-    type: 'rect';
+    type: 'rectangle';
     startX: number;
     startY: number;
     width: number;
@@ -69,6 +69,6 @@ export type selector = {
     angle?: number;
 }
 
-export type ShapeType = 'rect' | 'line' | 'circle' | 'image' | 'pointer' | 'bucket' | 'text';
+export type ShapeType = 'rectangle' | 'line' | 'circle' | 'image' | 'pointer' | 'bucket' | 'text';
 
 export type role = "Viewer" | "Editor" | "Owner";

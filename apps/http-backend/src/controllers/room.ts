@@ -423,3 +423,42 @@ export const updateRole = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 }
+
+export const getRoomEvents = async (req: Request, res: Response) => {
+  const { roomId } = req.params;
+
+  try {
+    const room = await prismaClient.room.findUnique({
+      where: { slug: Number(roomId) },
+      include: {
+        roomUsers: {
+          where: {
+            userId: req.userId
+          }
+        }
+      }
+    });
+
+    if (!room) {
+      res.status(404).json({ message: "Room not found" });
+      return;
+    }
+
+    const events = await prismaClient.roomEvents.findMany({
+      where: {
+        roomId: room.id
+      },
+      orderBy: {
+        sequenceNumber: "asc"
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      events
+    });
+  } catch (e) {
+    console.error("Failed to retrieve room events:", e);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};

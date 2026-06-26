@@ -1,7 +1,7 @@
 import { BACKEND_URL } from "@/config";
 import { role, selector, Shape, ShapeType } from "@/types";
 import axios from "axios";
-import { RotateCcw, Wind } from "lucide-react";
+import { EventType } from "@repo/common/enum";
 
 const ROTATE_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`;
 
@@ -23,6 +23,7 @@ export class Game {
   // Collection of shapes downloaded from the database or received via WebSocket messages
   private existingShapes: Shape[];
   private tempShapes: Shape[] = [];
+  private replayShapes: Shape[] | null = null;
   private selectedColor: string = "#000000";
   // Track whether the primary mouse button is currently held down
   private isClicked: boolean;
@@ -36,8 +37,8 @@ export class Game {
   private panY: number = 0;
   // Flag indicating if viewport panning mode (activated by holding Spacebar) is active
   private isPan: boolean = false;
-  // The active tool selected in the toolbar (e.g., 'rect', 'circle', 'line', 'pointer')
-  private selectedTool: ShapeType = "rect";
+  // The active tool selected in the toolbar (e.g., 'rectangle', 'circle', 'line', 'pointer')
+  private selectedTool: ShapeType = "rectangle";
   // The shape instance currently selected for editing/moving when using the pointer tool
   private selectedShape: Shape | null = null;
   // Array of bounding box handles (control points) used to resize/modify the selected shape
@@ -94,7 +95,7 @@ export class Game {
 
   /**
    * Sets the active drawing tool.
-   * @param tool The name of the tool to activate ('rect', 'circle', 'line', 'pointer').
+   * @param tool The name of the tool to activate ('rectangle', 'circle', 'line', 'pointer').
    */
   setTool = (tool: ShapeType) => {
     this.selectedTool = tool;
@@ -148,7 +149,7 @@ export class Game {
    * Helper to get the bounding box of a shape.
    */
   private getShapeBoundingBox = (shape: Shape) => {
-    if (shape.type === "rect" || shape.type === "image") {
+    if (shape.type === "rectangle" || shape.type === "image") {
       const x1 = Math.min(shape.startX, shape.startX + shape.width);
       const x2 = Math.max(shape.startX, shape.startX + shape.width);
       const y1 = Math.min(shape.startY, shape.startY + shape.height);
@@ -194,7 +195,13 @@ export class Game {
   /**
    * Helper to update two shapes locally, send updates to backend/websocket, and re-render.
    */
-  private updateTwoShapes = (shape1: Shape, shape2: Shape) => {
+  private updateTwoShapes = (
+    shape1: Shape,
+    shape2: Shape,
+    eventType?: EventType,
+    shape1FromZ?: number,
+    shape2FromZ?: number
+  ) => {
     let changed = false;
     if (shape1.id) {
       const idx = this.existingShapes.findIndex((s) => s.id === shape1.id);
@@ -203,9 +210,12 @@ export class Game {
         this.ws.send(
           JSON.stringify({
             type: "update_shape",
-            room: this.roomId,
+            eventType,
+            roomId: this.roomId,
             shapeId: shape1.id,
             shape: JSON.stringify(shape1),
+            fromZ: shape1FromZ,
+            toZ: shape1.zIndex,
           })
         );
         changed = true;
@@ -218,9 +228,12 @@ export class Game {
         this.ws.send(
           JSON.stringify({
             type: "update_shape",
-            room: this.roomId,
+            eventType,
+            roomId: this.roomId,
             shapeId: shape2.id,
             shape: JSON.stringify(shape2),
+            fromZ: shape2FromZ,
+            toZ: shape2.zIndex,
           })
         );
         changed = true;
@@ -282,7 +295,7 @@ export class Game {
       updatedNext = { ...nextShape, zIndex: curZ } as Shape;
     }
 
-    this.updateTwoShapes(updatedSelected, updatedNext);
+    this.updateTwoShapes(updatedSelected, updatedNext, EventType.CHANGE_LAYER, curZ, nextZ);
   };
 
   /**
@@ -324,7 +337,7 @@ export class Game {
       updatedPrev = { ...prevShape, zIndex: curZ } as Shape;
     }
 
-    this.updateTwoShapes(updatedSelected, updatedPrev);
+    this.updateTwoShapes(updatedSelected, updatedPrev, EventType.CHANGE_LAYER, curZ, prevZ);
   };
 
   /**
@@ -447,15 +460,21 @@ export class Game {
             const aspect = tempImg.width / tempImg.height;
             shape.height = shape.width / aspect;
           }
+          const delta = {
+            url: shape.url,
+            height: shape.height
+          };
+
           this.updateSelectors(shape);
           this.clearCanvas();
           this.triggerSelectionChange();
           this.ws.send(
             JSON.stringify({
               type: "update_shape",
-              room: this.roomId,
+              eventType: EventType.ADD_IMAGE,
+              roomId: this.roomId,
               shapeId: shape.id || -1,
-              shape: JSON.stringify(shape),
+              shape: JSON.stringify(delta),
             })
           );
         };
@@ -512,7 +531,7 @@ export class Game {
 
   private getShapeCenters = (shape: Shape) => {
     switch (shape.type) {
-      case "rect": {
+      case "rectangle": {
         return { centerX: shape.startX + shape.width / 2, centerY: shape.startY + shape.height / 2 };
       }
       case "circle": {
@@ -538,6 +557,7 @@ export class Game {
    * or picking resize selectors/handles for shape manipulation.
    */
   mouseDownHandler = (e: MouseEvent) => {
+    if (this.replayShapes !== null) return;
     this.isClicked = true;
     const { x, y } = this.getMousePos(e);
     this.startX = x;
@@ -552,7 +572,7 @@ export class Game {
 
     if (this.rotateIconLocation && this.selectedShape) {
       if (x > this.rotateIconLocation.x - 10 && x < this.rotateIconLocation.x + 20 && y > this.rotateIconLocation.y - 10 && y < this.rotateIconLocation.y + 20) {
-        this.originalShape = this.selectedShape;
+        this.originalShape = JSON.parse(JSON.stringify(this.selectedShape));
         this.isRotating = true;
         return;
       }
@@ -581,6 +601,7 @@ export class Game {
    * and dragging complete shapes across the canvas coordinate space.
    */
   mouseMoveHandler = (e: MouseEvent) => {
+    if (this.replayShapes !== null) return;
     const { x: currentX, y: currentY } = this.getMousePos(e);
     if (this.onMouseMove) {
       this.onMouseMove(Math.round(currentX), Math.round(currentY));
@@ -612,7 +633,7 @@ export class Game {
       // Redraw canvas to render the updated shape preview coordinates
       this.clearCanvas();
 
-      if (this.selectedTool === "rect") {
+      if (this.selectedTool === "rectangle") {
         this.ctx.strokeRect(this.startX, this.startY, width, height);
       } else if (this.selectedTool === "line") {
         this.ctx.beginPath();
@@ -667,8 +688,8 @@ export class Game {
       if (this.draggedSelector) {
         // CASE A: Dragging a specific resize handle
         if (
-          (this.selectedShape.type === "rect" || this.selectedShape.type === "image") &&
-          (this.originalShape.type === "rect" || this.originalShape.type === "image")
+          (this.selectedShape.type === "rectangle" || this.selectedShape.type === "image") &&
+          (this.originalShape.type === "rectangle" || this.originalShape.type === "image")
         ) {
           const originalRect = this.originalShape;
           const rect = this.selectedShape;
@@ -782,25 +803,60 @@ export class Game {
           const originalLine = this.originalShape;
           const selectorId = this.draggedSelector.id;
 
-          // Modify start point or end point coordinates of the line segment
-          switch (selectorId) {
-            case 1: // Start point
-              line.startX = originalLine.startX + deltaX;
-              line.startY = originalLine.startY + deltaY;
-              break;
-            case 2: // End point
-              line.endX = originalLine.endX + deltaX;
-              line.endY = originalLine.endY + deltaY;
-              break;
+          const { centerX: origCenterX, centerY: origCenterY } = this.getShapeCenters(originalLine);
+          const rad = (originalLine.angle || 0) * Math.PI / 180;
+
+          // Calculate current rotated world endpoints of the original line
+          const getRotatedPoint = (x: number, y: number) => {
+            const dx = x - origCenterX;
+            const dy = y - origCenterY;
+            return {
+              x: origCenterX + dx * Math.cos(rad) - dy * Math.sin(rad),
+              y: origCenterY + dx * Math.sin(rad) + dy * Math.cos(rad)
+            };
+          };
+
+          const origWStart = getRotatedPoint(originalLine.startX, originalLine.startY);
+          const origWEnd = getRotatedPoint(originalLine.endX, originalLine.endY);
+
+          let W_start = { x: 0, y: 0 };
+          let W_end = { x: 0, y: 0 };
+
+          if (selectorId === 1) {
+            // Dragging start point: start point moves to current mouse, end point is fixed
+            W_start = { x: currentX, y: currentY };
+            W_end = origWEnd;
+          } else if (selectorId === 2) {
+            // Dragging end point: end point moves to current mouse, start point is fixed
+            W_start = origWStart;
+            W_end = { x: currentX, y: currentY };
           }
+
+          // New center of the line segment in world space
+          const newCx = (W_start.x + W_end.x) / 2;
+          const newCy = (W_start.y + W_end.y) / 2;
+
+          // Project world coordinates back to local coordinates by rotating by -rad around the new center
+          const cosNeg = Math.cos(-rad);
+          const sinNeg = Math.sin(-rad);
+
+          const dxStart = W_start.x - newCx;
+          const dyStart = W_start.y - newCy;
+          line.startX = newCx + dxStart * cosNeg - dyStart * sinNeg;
+          line.startY = newCy + dxStart * sinNeg + dyStart * cosNeg;
+
+          const dxEnd = W_end.x - newCx;
+          const dyEnd = W_end.y - newCy;
+          line.endX = newCx + dxEnd * cosNeg - dyEnd * sinNeg;
+          line.endY = newCy + dxEnd * sinNeg + dyEnd * cosNeg;
 
           this.updateSelectors(line);
         }
       } else {
         // CASE B: Moving the entire shape (dragging by body rather than selectors)
         if (
-          (this.selectedShape.type === "rect" || this.selectedShape.type === "image") &&
-          (this.originalShape.type === "rect" || this.originalShape.type === "image")
+          (this.selectedShape.type === "rectangle" || this.selectedShape.type === "image") &&
+          (this.originalShape.type === "rectangle" || this.originalShape.type === "image")
         ) {
           const rect = this.selectedShape;
           rect.startX = this.originalShape.startX + deltaX;
@@ -838,6 +894,7 @@ export class Game {
    * to the backend WebSocket channel so other users see updates in real time.
    */
   mouseUpHandler = (e: MouseEvent) => {
+    if (this.replayShapes !== null) return;
     if (this.myRole === "Viewer") {
       this.isClicked = false;
       return;
@@ -852,13 +909,29 @@ export class Game {
     if (this.draggedSelector || (this.selectedTool === "pointer" && this.originalShape)) {
       this.isClicked = false;
 
-      let shapeId: number = -1;
-      if (this.selectedShape?.id) {
-        shapeId = this.selectedShape?.id;
+      const selectedShape = this.selectedShape;
+      const originalShape = this.originalShape;
+
+      if (!selectedShape || !originalShape) {
+        this.draggedSelector = null;
+        this.originalShape = null;
+        this.isRotating = false;
+        return;
       }
 
-      if (this.selectedShape && (this.selectedShape.type === "rect" || this.selectedShape.type === "image")) {
-        const rect = this.selectedShape;
+      let shapeId: number = -1;
+      if (selectedShape.id) {
+        shapeId = selectedShape.id;
+      }
+
+      let eventType = this.isRotating ? "ROTATE_SHAPE" : this.draggedSelector ? "SCALE_SHAPE" : "MOVE_SHAPE";
+
+      // 1. Normalize shapes and update selectors
+      if (
+        (selectedShape.type === "rectangle" || selectedShape.type === "image") &&
+        (originalShape.type === "rectangle" || originalShape.type === "image")
+      ) {
+        const rect = selectedShape;
         if (rect.width < 0) {
           rect.startX = rect.startX + rect.width;
           rect.width = Math.abs(rect.width);
@@ -868,21 +941,130 @@ export class Game {
           rect.height = Math.abs(rect.height);
         }
         this.updateSelectors(rect);
+      } else if (selectedShape.type === "circle" && originalShape.type === "circle") {
+        const circle = selectedShape;
+        if (circle.radius < 0) {
+          circle.centerX = circle.centerX + circle.radius;
+          circle.centerY = circle.centerY + circle.radius;
+          circle.radius = Math.abs(circle.radius);
+        }
+        this.updateSelectors(circle);
       }
 
-      if (this.selectedShape) {
-        this.selectedShape.updatedByUserId = this.myUserId || undefined;
+      // 2. Determine if shape state did change
+      let didChange = false;
+      if (eventType === "MOVE_SHAPE") {
+        if (
+          (selectedShape.type === "rectangle" || selectedShape.type === "image" || selectedShape.type === "text") &&
+          (originalShape.type === "rectangle" || originalShape.type === "image" || originalShape.type === "text")
+        ) {
+          didChange = selectedShape.startX !== originalShape.startX || selectedShape.startY !== originalShape.startY;
+        } else if (selectedShape.type === "circle" && originalShape.type === "circle") {
+          didChange = selectedShape.centerX !== originalShape.centerX || selectedShape.centerY !== originalShape.centerY;
+        } else if (selectedShape.type === "line" && originalShape.type === "line") {
+          didChange = selectedShape.startX !== originalShape.startX || selectedShape.startY !== originalShape.startY || selectedShape.endX !== originalShape.endX || selectedShape.endY !== originalShape.endY;
+        } else if (selectedShape.type === "text" && originalShape.type === "text") {
+          didChange = selectedShape.startX !== originalShape.startX || selectedShape.startY !== originalShape.startY;
+        }
+      } else if (eventType === "SCALE_SHAPE") {
+        if (
+          (selectedShape.type === "rectangle" || selectedShape.type === "image") &&
+          (originalShape.type === "rectangle" || originalShape.type === "image")
+        ) {
+          didChange = selectedShape.width !== originalShape.width || selectedShape.height !== originalShape.height;
+        } else if (selectedShape.type === "circle" && originalShape.type === "circle") {
+          didChange = selectedShape.radius !== originalShape.radius;
+        } else if (selectedShape.type === "line" && originalShape.type === "line") {
+          didChange = selectedShape.startX !== originalShape.startX || selectedShape.startY !== originalShape.startY || selectedShape.endX !== originalShape.endX || selectedShape.endY !== originalShape.endY;
+        }
+      } else if (eventType === "ROTATE_SHAPE") {
+        if (
+          (selectedShape.type === "rectangle" || selectedShape.type === "image" || selectedShape.type === "line") &&
+          (originalShape.type === "rectangle" || originalShape.type === "image" || originalShape.type === "line")
+        ) {
+          didChange = (selectedShape.angle || 0) !== (originalShape.angle || 0);
+        }
       }
 
-      this.ws.send(
-        JSON.stringify({
-          type: "update_shape",
-          room: this.roomId,
-          shapeId: shapeId,
-          shape: JSON.stringify(this.selectedShape),
-          updatedBy: this.myUserId
-        })
-      );
+      // 3. Broadcast the updates with detailed extra fields for logging
+      if (didChange) {
+        selectedShape.updatedByUserId = this.myUserId || undefined;
+
+        let extraFields: Record<string, any> = {};
+        if (eventType === "MOVE_SHAPE") {
+          if (selectedShape.type === "circle" && originalShape.type === "circle") {
+            extraFields = {
+              fromX: originalShape.centerX,
+              fromY: originalShape.centerY,
+              toX: selectedShape.centerX,
+              toY: selectedShape.centerY,
+            };
+          } else if (selectedShape.type === "line" && originalShape.type === "line") {
+            extraFields = {
+              fromStartX: originalShape.startX,
+              fromStartY: originalShape.startY,
+              fromEndX: originalShape.endX,
+              fromEndY: originalShape.endY,
+              toStartX: selectedShape.startX,
+              toStartY: selectedShape.startY,
+              toEndX: selectedShape.endX,
+              toEndY: selectedShape.endY,
+            };
+          } else if (selectedShape.type !== "circle" && originalShape.type !== "circle") {
+            extraFields = {
+              fromX: (originalShape as any).startX || 0,
+              fromY: (originalShape as any).startY || 0,
+              toX: (selectedShape as any).startX || 0,
+              toY: (selectedShape as any).startY || 0,
+            };
+          }
+        } else if (eventType === "SCALE_SHAPE") {
+          if (
+            (selectedShape.type === "rectangle" || selectedShape.type === "image") &&
+            (originalShape.type === "rectangle" || originalShape.type === "image")
+          ) {
+            extraFields = {
+              fromWidth: originalShape.width,
+              fromHeight: originalShape.height,
+              toWidth: selectedShape.width,
+              toHeight: selectedShape.height,
+            };
+          } else if (selectedShape.type === "circle" && originalShape.type === "circle") {
+            extraFields = {
+              fromRadius: originalShape.radius,
+              toRadius: selectedShape.radius,
+            };
+          } else if (selectedShape.type === "line" && originalShape.type === "line") {
+            extraFields = {
+              fromStartX: originalShape.startX,
+              fromStartY: originalShape.startY,
+              toEndX: selectedShape.endX,
+              toEndY: selectedShape.endY,
+            };
+          }
+        } else if (eventType === "ROTATE_SHAPE") {
+          if (
+            (selectedShape.type === "rectangle" || selectedShape.type === "image" || selectedShape.type === "line") &&
+            (originalShape.type === "rectangle" || originalShape.type === "image" || originalShape.type === "line")
+          ) {
+            extraFields = {
+              fromAngle: originalShape.angle || 0,
+              toAngle: selectedShape.angle || 0,
+            };
+          }
+        }
+        this.ws.send(
+          JSON.stringify({
+            type: "update_shape",
+            eventType,
+            roomId: this.roomId,
+            shapeId: shapeId,
+            shape: JSON.stringify(selectedShape),
+            updatedBy: this.myUserId,
+            ...extraFields
+          })
+        );
+      }
 
       this.draggedSelector = null;
       this.originalShape = null;
@@ -914,7 +1096,7 @@ export class Game {
         type: this.selectedTool,
         zIndex,
       };
-    } else if (this.selectedTool === "rect") {
+    } else if (this.selectedTool === "rectangle") {
       shape = {
         type: this.selectedTool,
         startX: width >= 0 ? this.startX : this.startX + width,
@@ -1022,21 +1204,25 @@ export class Game {
       const shape = this.hitTest(x, y);
 
       if (!shape || shape === "rotate") return;
+      if (shape.type === "selector") return;
+      if (shape.type !== "rectangle" && shape.type !== "circle") return;
 
-      const updatedShape = {
-        ...shape,
-        bg_color: this.selectedColor,
-        updatedByUserId: this.myUserId || undefined
-      };
+      const fromColor = shape.bg_color || "";
+      shape.bg_color = this.selectedColor;
+      shape.updatedByUserId = this.myUserId || undefined;
 
       this.ws.send(
         JSON.stringify({
           type: "update_shape",
-          room: this.roomId,
-          shapeId: updatedShape.id,
-          shape: JSON.stringify(updatedShape),
+          eventType: EventType.CHANGE_FILL,
+          fromColor: fromColor,
+          toColor: this.selectedColor,
+          roomId: this.roomId,
+          shapeId: shape.id,
+          shape: JSON.stringify(shape),
         })
       );
+      this.clearCanvas();
     }
 
     if (this.selectedTool === "text") {
@@ -1066,6 +1252,7 @@ export class Game {
             JSON.stringify({
               type: "chat",
               roomId: this.roomId,
+              eventType: EventType.CREATE_SHAPE,
               shape: JSON.stringify(shape),
               userId: this.myUserId,
             })
@@ -1103,7 +1290,10 @@ export class Game {
               this.deleteShapeById(hitResult.id);
             } else {
               const updated = { ...hitResult, text: newText } as Shape;
-              this.updateShape(updated);
+              this.updateShape(updated, EventType.CHANGE_TEXT, {
+                fromText: hitResult.text,
+                toText: newText,
+              });
             }
           },
           () => {
@@ -1163,11 +1353,11 @@ export class Game {
    */
   keyboardUpHandler = (e: KeyboardEvent) => {
     if (e.key === ' ') {
-      
-      const  canvasStartX = -this.panX / this.zoom;
-      const  canvasStartY = -this.panY / this.zoom;
-      const  canvasEndX = (window.innerWidth - this.panX) / this.zoom;
-      const  canvasEndY = (window.innerHeight - this.panY) / this.zoom;
+
+      const canvasStartX = -this.panX / this.zoom;
+      const canvasStartY = -this.panY / this.zoom;
+      const canvasEndX = (window.innerWidth - this.panX) / this.zoom;
+      const canvasEndY = (window.innerHeight - this.panY) / this.zoom;
 
       this.isPan = false;
       this.ws.send(JSON.stringify({
@@ -1202,7 +1392,7 @@ export class Game {
     }
   };
 
-  updateShape = (updatedShape: Shape) => {
+  updateShape = (updatedShape: Shape, eventType?: EventType, extraFields?: Record<string, any>) => {
     if (this.myRole === "Viewer") return;
     if (updatedShape.id) {
       updatedShape.updatedByUserId = this.myUserId || undefined;
@@ -1217,9 +1407,11 @@ export class Game {
         this.ws.send(
           JSON.stringify({
             type: "update_shape",
-            room: this.roomId,
+            eventType,
+            roomId: this.roomId,
             shapeId: updatedShape.id,
             shape: JSON.stringify(updatedShape),
+            ...extraFields,
           })
         );
       }
@@ -1232,7 +1424,7 @@ export class Game {
     this.ws.send(
       JSON.stringify({
         type: "delete_shape",
-        room: this.roomId,
+        roomId: this.roomId,
         shapeId: this.selectedShape.id || -1,
       })
     );
@@ -1247,7 +1439,7 @@ export class Game {
     this.ws.send(
       JSON.stringify({
         type: "delete_shape",
-        room: this.roomId,
+        roomId: this.roomId,
         shapeId: id,
       })
     );
@@ -1259,7 +1451,7 @@ export class Game {
    * @param shape The shape currently selected.
    */
   updateSelectors = (shape: Shape) => {
-    if (shape.type === "rect" || shape.type === "image") {
+    if (shape.type === "rectangle" || shape.type === "image") {
       const radius = 6;
       const { centerX, centerY } = this.getShapeCenters(shape)
       const rad = (shape.angle || 0) * Math.PI / 180;
@@ -1407,10 +1599,10 @@ export class Game {
     for (let i = this.existingShapes.length - 1; i >= 0; i--) {
       const shape = this.existingShapes[i];
 
-      if (shape.type === "rect" || shape.type === "image") {
+      if (shape.type === "rectangle" || shape.type === "image") {
         const { centerX, centerY } = this.getShapeCenters(shape);
         const rad = (shape.angle || 0) * Math.PI / 180;
-        
+
         // Rotate test point back to unrotated space around center
         const dx = x - centerX;
         const dy = y - centerY;
@@ -1540,6 +1732,7 @@ export class Game {
           ...data.shape.shape,
         };
 
+        console.log(shape)
         this.existingShapes.push(shape);
         this.existingShapes.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
         this.clearCanvas();
@@ -1547,6 +1740,9 @@ export class Game {
 
       // Remote user modified a shape
       if (data.type === "shape_updated") {
+        if (data.from === this.myUserId) {
+          return;
+        }
         const shape = this.existingShapes.find(
           (s) => s.id === data.shape.id
         );
@@ -1718,7 +1914,7 @@ export class Game {
       this.ctx.globalAlpha = 0.35; // Reduce pen opacity to 35% for temp shapes
       this.tempShapes.forEach((shape) => {
         this.ctx.save();
-        if (shape.type === "rect") {
+        if (shape.type === "rectangle") {
           this.ctx.translate(shape.startX + shape.width / 2, shape.startY + shape.height / 2);
           this.ctx.rotate(shape.angle ? shape.angle * (Math.PI / 180) : 0);
           this.ctx.translate(-shape.startX - shape.width / 2, -shape.startY - shape.height / 2);
@@ -1775,13 +1971,14 @@ export class Game {
       this.ctx.drawImage(this.rotateImg, this.rotateIconLocation.x, this.rotateIconLocation.y, 20, 20);
     }
 
-    // 3. Render all existing shapes loaded in memory
-    if (this.existingShapes.length > 0) {
-      this.existingShapes.forEach((shape) => {
+    // 3. Render all shapes loaded in memory (or replay shapes if in replay mode)
+    const shapesToDraw = this.replayShapes !== null ? this.replayShapes : this.existingShapes;
+    if (shapesToDraw.length > 0) {
+      shapesToDraw.forEach((shape) => {
         if (shape.id !== undefined && shape.id === this.editingTextShapeId) return;
         this.ctx.save();
         const { centerX, centerY } = this.getShapeCenters(shape);
-        if (shape.type === "rect") {
+        if (shape.type === "rectangle") {
           this.ctx.translate(centerX, centerY);
           this.ctx.rotate((shape.angle || 0) * Math.PI / 180);
           if (shape.color) {
@@ -1853,7 +2050,7 @@ export class Game {
       });
 
       // Draw connector line for the rotate handle
-      if (this.rotateIconLocation && this.selectedShape && (this.selectedShape.type === "rect" || this.selectedShape.type === "image" || this.selectedShape.type === "line")) {
+      if (this.rotateIconLocation && this.selectedShape && (this.selectedShape.type === "rectangle" || this.selectedShape.type === "image" || this.selectedShape.type === "line")) {
         const { centerX, centerY } = this.getShapeCenters(this.selectedShape);
         const rad = (this.selectedShape.angle || 0) * Math.PI / 180;
 
@@ -1868,7 +2065,7 @@ export class Game {
           logoLocalX = 0;
           logoLocalY = -40;
         } else {
-          // rect or image
+          // rectangle or image
           baseLocalX = 0;
           baseLocalY = -this.selectedShape.height / 2;
           logoLocalX = 0;
@@ -1913,6 +2110,11 @@ export class Game {
         this.ctx.restore();
       }
     }
+  };
+
+  setReplayShapes = (replayShapes: Shape[] | null) => {
+    this.replayShapes = replayShapes;
+    this.clearCanvas();
   };
 
   /**

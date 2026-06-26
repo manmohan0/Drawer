@@ -8,9 +8,10 @@
     "build": "npx tsc -b"
   },
   "exports": {
-    "./types": "./dist/types.js"
+    "./types": "./dist/types.js",
+    "./enum": "./dist/enums.js"
   },
-  "devDependencies": {    
+  "devDependencies": {
     "@repo/typescript-config": "workspace:*"
   },
   "keywords": [],

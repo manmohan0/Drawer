@@ -2,14 +2,18 @@ import { BACKEND_URL } from "@/config";
 import { Game } from "@/Draw/Game";
 import { role, Shape, ShapeType } from "@/types";
 import axios from "axios";
-import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2, PaintBucket, ArrowUp, ArrowDown, Type, LogOut, ChevronDown, Folder, Eye } from "lucide-react";
+import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2, PaintBucket, ArrowUp, ArrowDown, Type, LogOut, ChevronDown, Folder, Eye, Play, Pause, SkipBack, SkipForward } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getCookie, deleteCookie } from "@/utils/cookie";
+import { EventType } from "@repo/common/enum";
 
 export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const colorChangeTimeoutRef = useRef<any>(null);
+  const metricChangeTimeoutRef = useRef<any>(null);
+  const originalShapeRef = useRef<Shape | null>(null);
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [myRooms, setMyRooms] = useState<any[]>([]);
@@ -88,7 +92,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   };
 
   const [game, setGame] = useState<Game>();
-  const [tool, setTool] = useState<ShapeType>("rect");
+  const [tool, setTool] = useState<ShapeType>("rectangle");
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
   const [selectedShape, setSelectedShape] = useState<Shape | null>(null);
   const [prompt, setPrompt] = useState<string>("");
@@ -102,16 +106,115 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
     value: string;
     fontSize: number;
     onSave: (val: string) => void;
-    onCancel: () => void; 
+    onCancel: () => void;
   } | null>(null);
 
-  
+  const [isReplayMode, setIsReplayMode] = useState(false);
+  const [replayEvents, setReplayEvents] = useState<any[]>([]);
+  const [replayCurrentIndex, setReplayCurrentIndex] = useState(-1);
+  const [replayIsPlaying, setReplayIsPlaying] = useState(false);
+  const [replaySpeed, setReplaySpeed] = useState(500); // ms delay
+
+  const computeReplayShapes = (eventsList: any[], targetIndex: number): Shape[] => {
+    const shapesMap = new Map<number, Shape>();
+
+    for (let i = 0; i <= targetIndex; i++) {
+      const event = eventsList[i];
+      if (!event) continue;
+
+      const eventType = event.eventType;
+      const shapeId = event.shapeId;
+      const payload = typeof event.payload === "string" ? JSON.parse(event.payload) : event.payload;
+
+      if (eventType === "CREATE_SHAPE" || eventType === "ADD_IMAGE") {
+        shapesMap.set(shapeId, {
+          id: shapeId,
+          userId: event.userId,
+          updatedByUserId: event.userId,
+          ...payload
+        } as Shape);
+      } else if (eventType === "DELETE_SHAPE") {
+        shapesMap.delete(shapeId);
+      } else {
+        const existing = shapesMap.get(shapeId);
+        if (existing) {
+          shapesMap.set(shapeId, {
+            ...existing,
+            ...payload
+          } as Shape);
+        }
+      }
+    }
+
+    return Array.from(shapesMap.values());
+  };
+
+  useEffect(() => {
+    if (!replayIsPlaying || replayEvents.length === 0) return;
+    if (replayCurrentIndex >= replayEvents.length - 1) {
+      setReplayIsPlaying(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setReplayCurrentIndex(prev => {
+        const next = prev + 1;
+        const shapes = computeReplayShapes(replayEvents, next);
+        game?.setReplayShapes(shapes);
+        return next;
+      });
+    }, replaySpeed);
+
+    return () => clearTimeout(timer);
+  }, [replayIsPlaying, replayCurrentIndex, replaySpeed, replayEvents, game]);
+
+  const startReplayMode = async () => {
+    if (!game) return;
+    setLoading(true);
+    setError(null);
+    setSelectedShape(null); // Clear selected shape so details card hides
+    try {
+      const token = getCookie("Authorization");
+      const res = await axios.get(`${BACKEND_URL}/room/events/${roomId}`, {
+        headers: {
+          Authorization: token,
+        },
+        withCredentials: true,
+      });
+
+      if (res.data && res.data.success) {
+        const events = res.data.events || [];
+        setReplayEvents(events);
+        setReplayCurrentIndex(-1);
+        game.setReplayShapes([]); // Clear the canvas to start replay
+        setIsReplayMode(true);
+        setReplayIsPlaying(true); // Auto play
+      } else {
+        setError("Failed to load events for replay.");
+      }
+    } catch (err: any) {
+      console.error("Replay fetch failed:", err);
+      setError("Failed to load room events history.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const stopReplayMode = () => {
+    setIsReplayMode(false);
+    setReplayIsPlaying(false);
+    setReplayEvents([]);
+    setReplayCurrentIndex(-1);
+    game?.setReplayShapes(null); // Restore live canvas drawing
+  };
+
+
   useEffect(() => {
     if (game && myRole) {
       game.setMyRole(myRole);
     }
   }, [game, myRole]);
-  
+
   const handlePromptSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!prompt.trim() || loading) return;
@@ -139,7 +242,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
     } catch (err: any) {
       console.error("Failed to generate shapes:", err);
       setError(
-        err.response?.data?.message || 
+        err.response?.data?.message ||
         "Failed to generate shapes. Please make sure GEMINI_API_KEY is configured in http-backend env."
       );
     } finally {
@@ -168,7 +271,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
     game?.setColor(newColor);
   };
   const types = [
-    { name: "rect", logo: <RectangleHorizontal /> },
+    { name: "rectangle", logo: <RectangleHorizontal /> },
     { name: "line", logo: <PencilLine /> },
     { name: "circle", logo: <Circle /> },
     { name: "image", logo: <Image /> },
@@ -183,7 +286,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       const game = new Game(canvas, roomId, ws, (shape) => {
         setSelectedShape(shape);
       });
-      
+
       game.onMouseMove = (x, y) => {
         setMousePos({ x, y });
       };
@@ -191,7 +294,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       game.onRoleChange = (newRole) => {
         setMyRoleState(newRole);
       };
-      
+
       game.onRoomJoined = (myUserId, users) => {
         setMyUserId(myUserId);
         const user = users[myUserId];
@@ -200,7 +303,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
         }
         setActiveUsers(users);
       };
-      
+
       game.onStartTextEdit = (x, y, text, fontSize, onSave, onCancel) => {
         setTextEditState({
           x,
@@ -241,9 +344,9 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
 
   const getShapeDetails = () => {
     if (!selectedShape) return null;
-    
+
     switch (selectedShape.type) {
-      case "rect":
+      case "rectangle":
         return {
           title: "Rectangle",
           icon: <RectangleHorizontal className="w-5 h-5 text-indigo-500" />,
@@ -309,7 +412,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
             { label: "Position X", value: Math.round(selectedShape.startX), key: "startX", editable: true },
             { label: "Position Y", value: Math.round(selectedShape.startY), key: "startY", editable: true },
             { label: "Font Size", value: selectedShape.fontSize || 20, key: "fontSize", editable: true },
-            { label: "Text", value: selectedShape.text, key: "text", editable: false },
+            { label: "Text", value: selectedShape.text, key: "text", editable: true },
           ]
         };
       default:
@@ -317,17 +420,99 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
     }
   };
 
+  useEffect(() => {
+    return () => {
+      if (metricChangeTimeoutRef.current) {
+        clearTimeout(metricChangeTimeoutRef.current);
+        metricChangeTimeoutRef.current = null;
+      }
+      originalShapeRef.current = null;
+    };
+  }, [selectedShape?.id]);
+
   const handleMetricChange = (key: string, valStr: string) => {
     if (!selectedShape || !game) return;
-    const val = Number(valStr);
-    if (isNaN(val)) return;
+
+    let val: any;
+    if (key === "text") {
+      val = valStr;
+    } else {
+      val = Number(valStr);
+      if (isNaN(val)) return;
+    }
 
     const updatedShape = {
       ...selectedShape,
       [key]: val
     } as Shape;
 
-    game.updateShape(updatedShape);
+    if (!originalShapeRef.current) {
+      originalShapeRef.current = selectedShape;
+    }
+
+    setSelectedShape(updatedShape);
+
+    if (metricChangeTimeoutRef.current) {
+      clearTimeout(metricChangeTimeoutRef.current);
+    }
+
+    metricChangeTimeoutRef.current = setTimeout(() => {
+      const origShape = originalShapeRef.current || selectedShape;
+      let eventType: EventType | undefined = undefined;
+      let extraFields: Record<string, any> = {};
+
+      if (key === "text") {
+        eventType = EventType.CHANGE_TEXT;
+        extraFields = {
+          fromText: origShape.type === "text" ? origShape.text : "",
+          toText: val
+        };
+      } else if (["startX", "startY", "centerX", "centerY", "endX", "endY"].includes(key)) {
+        eventType = EventType.MOVE_SHAPE;
+        if (updatedShape.type === "line") {
+          extraFields = {
+            fromStartX: (origShape as any).startX,
+            fromStartY: (origShape as any).startY,
+            fromEndX: (origShape as any).endX,
+            fromEndY: (origShape as any).endY,
+            toStartX: (updatedShape as any).startX,
+            toStartY: (updatedShape as any).startY,
+            toEndX: (updatedShape as any).endX,
+            toEndY: (updatedShape as any).endY
+          };
+        } else {
+          const fromX = (origShape as any).startX !== undefined ? (origShape as any).startX : (origShape as any).centerX;
+          const fromY = (origShape as any).startY !== undefined ? (origShape as any).startY : (origShape as any).centerY;
+          const toX = (updatedShape as any).startX !== undefined ? (updatedShape as any).startX : (updatedShape as any).centerX;
+          const toY = (updatedShape as any).startY !== undefined ? (updatedShape as any).startY : (updatedShape as any).centerY;
+          extraFields = {
+            fromX,
+            fromY,
+            toX,
+            toY
+          };
+        }
+      } else if (["width", "height", "radius"].includes(key)) {
+        eventType = EventType.SCALE_SHAPE;
+        if (updatedShape.type === "rectangle" || updatedShape.type === "image") {
+          extraFields = {
+            fromWidth: (origShape as any).width,
+            fromHeight: (origShape as any).height,
+            toWidth: (updatedShape as any).width,
+            toHeight: (updatedShape as any).height
+          };
+        } else if (updatedShape.type === "circle") {
+          extraFields = {
+            fromRadius: (origShape as any).radius,
+            toRadius: (updatedShape as any).radius
+          };
+        }
+      }
+
+      game.updateShape(updatedShape, eventType, extraFields);
+      metricChangeTimeoutRef.current = null;
+      originalShapeRef.current = null;
+    }, 500);
   };
 
   const handleColorChange = (key: "color" | "bg_color", newColor: string) => {
@@ -338,7 +523,18 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       [key]: newColor
     } as Shape;
 
-    game.updateShape(updatedShape);
+    const eventType = key === "color" ? EventType.CHANGE_STROKE : EventType.CHANGE_FILL;
+    const fromColor = (selectedShape as any)[key] || eventType === EventType.CHANGE_STROKE ? "#000000" : "";
+    const toColor = newColor;
+
+    if (colorChangeTimeoutRef.current) {
+      clearTimeout(colorChangeTimeoutRef.current);
+    }
+
+    colorChangeTimeoutRef.current = setTimeout(() => game.updateShape(updatedShape, eventType, {
+      fromColor,
+      toColor
+    }), 500);
   };
 
   const details = getShapeDetails();
@@ -396,27 +592,28 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               {/* Grid of details */}
               <div className="grid grid-cols-2 gap-3">
                 {details.metrics.map((metric, idx) => (
-                  <div 
-                    key={idx} 
-                    className={`flex flex-col p-2 rounded-xl bg-gray-50/70 border border-gray-100 transition-all duration-200 hover:bg-white hover:border-indigo-100 hover:shadow-sm ${
-                      metric.label === "Area" || metric.label === "Length" || metric.label === "Circumference" || metric.label === "URL Status"
-                        ? "col-span-2" 
+                  <div
+                    key={idx}
+                    className={`flex flex-col p-2 rounded-xl bg-gray-50/70 border border-gray-100 transition-all duration-200 hover:bg-white hover:border-indigo-100 hover:shadow-sm ${metric.label === "Area" || metric.label === "Length" || metric.label === "Circumference" || metric.label === "URL Status" || metric.key === "text"
+                        ? "col-span-2"
                         : ""
-                    }`}
+                      }`}
                   >
                     <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
                       {metric.label}
                     </span>
                     {metric.editable && metric.key ? (
-                      <div className="flex items-center space-x-1 mt-0.5">
+                      <div className="flex items-center space-x-1 mt-0.5 w-full">
                         <input
-                          type="number"
+                          type={metric.key === "text" ? "text" : "number"}
                           value={metric.value}
                           onChange={(e) => handleMetricChange(metric.key!, e.target.value)}
                           disabled={myRole === "Viewer"}
                           className="text-xs font-semibold text-gray-700 bg-transparent border-b border-dashed border-gray-300 hover:border-indigo-400 focus:border-indigo-500 focus:outline-none w-full py-0.5 disabled:opacity-75 disabled:cursor-not-allowed"
                         />
-                        <span className="text-[10px] text-gray-400">px</span>
+                        {metric.key !== "text" && (
+                          <span className="text-[10px] text-gray-400">px</span>
+                        )}
                       </div>
                     ) : (
                       <span className="text-xs font-semibold text-gray-700 mt-0.5">
@@ -428,15 +625,17 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               </div>
 
               {/* Colors Section */}
-              {selectedShape && (selectedShape.type === "rect" || selectedShape.type === "circle" || selectedShape.type === "line") && (
+              {selectedShape && (selectedShape.type === "rectangle" || selectedShape.type === "circle" || selectedShape.type === "line" || selectedShape.type === "text") && (
                 <div className="pt-3 border-t border-gray-100 space-y-3">
                   <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block">
                     Colors
                   </span>
-                  
-                  {/* Border Color */}
+
+                  {/* Border/Text Color */}
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-600 font-medium">Border Color</span>
+                    <span className="text-xs text-gray-600 font-medium">
+                      {selectedShape.type === "text" ? "Text Color" : "Border Color"}
+                    </span>
                     <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors shadow-sm ${myRole === "Viewer" ? "cursor-not-allowed opacity-50" : "cursor-pointer group"}`}>
                       <input
                         type="color"
@@ -445,7 +644,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                         disabled={myRole === "Viewer"}
                         className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10 disabled:cursor-not-allowed"
                       />
-                      <div 
+                      <div
                         className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
                         style={{ backgroundColor: selectedShape.color || "#000000" }}
                       />
@@ -453,7 +652,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                   </div>
 
                   {/* Fill Color (only for rect and circle) */}
-                  {(selectedShape.type === "rect" || selectedShape.type === "circle") && (
+                  {(selectedShape.type === "rectangle" || selectedShape.type === "circle") && (
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-600 font-medium">Fill Color</span>
                       <div className="flex items-center space-x-2">
@@ -461,11 +660,10 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                         <button
                           onClick={() => handleColorChange("bg_color", "")}
                           disabled={myRole === "Viewer"}
-                          className={`px-2 py-1 text-[10px] font-semibold border rounded-lg transition-all ${
-                            !selectedShape.bg_color 
+                          className={`px-2 py-1 text-[10px] font-semibold border rounded-lg transition-all ${!selectedShape.bg_color
                               ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm"
                               : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                            } disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                           Transparent
                         </button>
@@ -477,7 +675,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                             disabled={myRole === "Viewer"}
                             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10 disabled:cursor-not-allowed"
                           />
-                          <div 
+                          <div
                             className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
                             style={{ backgroundColor: selectedShape.bg_color || "#ffffff" }}
                           />
@@ -495,11 +693,10 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                     <User className="w-3.5 h-3.5 text-gray-400" />
                     <span>Created by:</span>
                   </div>
-                  <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
-                    creatorName === "You" 
-                      ? "bg-indigo-50 text-indigo-600 border border-indigo-100" 
+                  <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${creatorName === "You"
+                      ? "bg-indigo-50 text-indigo-600 border border-indigo-100"
                       : "bg-gray-100 text-gray-600"
-                  }`}>
+                    }`}>
                     {creatorName || "Unknown"}
                   </span>
                 </div>
@@ -508,11 +705,10 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                     <User className="w-3.5 h-3.5 text-gray-400" />
                     <span>Updated by:</span>
                   </div>
-                  <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
-                    updaterName === "You" 
-                      ? "bg-indigo-50 text-indigo-600 border border-indigo-100" 
+                  <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${updaterName === "You"
+                      ? "bg-indigo-50 text-indigo-600 border border-indigo-100"
                       : "bg-gray-100 text-gray-600"
-                  }`}>
+                    }`}>
                     {updaterName || creatorName || "Unknown"}
                   </span>
                 </div>
@@ -581,7 +777,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               onChange={(e) => onColorChange(e.target.value)}
               className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
             />
-            <div 
+            <div
               className="w-5 h-5 rounded-full border border-white shadow-sm transition-transform duration-200 group-hover:scale-110"
               style={{ backgroundColor: color }}
             />
@@ -596,8 +792,17 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
         </div>
       )}
 
-      {/* Profile menu */}
-      <div className="absolute top-4 right-4 z-50" ref={dropdownRef}>
+      {/* Profile & Replay menu */}
+      <div className="absolute top-4 right-4 z-50 flex items-center space-x-2.5" ref={dropdownRef}>
+        {!isReplayMode && (
+          <button
+            onClick={startReplayMode}
+            className="flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-200/50 text-white font-semibold shadow-lg hover:shadow-xl rounded-full px-4 py-2 transition-all duration-200 cursor-pointer active:scale-95 text-xs select-none border border-indigo-500/10"
+          >
+            <Sparkles className="w-3.5 h-3.5 animate-pulse text-indigo-200" />
+            <span>Replay Time-Lapse</span>
+          </button>
+        )}
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
           className="flex items-center space-x-2 bg-white/80 backdrop-blur-md border border-gray-200/50 hover:bg-white hover:border-gray-300 shadow-lg hover:shadow-xl rounded-full p-1.5 pr-3 transition-all duration-200 cursor-pointer active:scale-95 group"
@@ -629,8 +834,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                   </div>
                   <div className="flex flex-col bg-white p-3.5 rounded-xl border border-orange-100/50 shadow-sm">
                     <span className="text-[9px] uppercase font-bold text-gray-400">Admin</span>
-                    <span 
-                      className="font-medium text-gray-800 mt-0.5 truncate text-xs" 
+                    <span
+                      className="font-medium text-gray-800 mt-0.5 truncate text-xs"
                       title={
                         Array.isArray(currentRoom.admin)
                           ? currentRoom.admin.map((a: any) => `${a.firstName} ${a.lastName}`).join(", ")
@@ -686,7 +891,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                   <Folder className="w-3.5 h-3.5 mr-1 text-gray-400" />
                   My Rooms
                 </span>
-                
+
                 {roomsLoading ? (
                   <div className="flex items-center justify-center py-6 text-gray-400 space-x-2">
                     <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
@@ -710,11 +915,10 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                             }
                             setIsDropdownOpen(false);
                           }}
-                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-left transition-all cursor-pointer ${
-                            isCurrent
+                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-left transition-all cursor-pointer ${isCurrent
                               ? "bg-orange-50 border-orange-200 text-orange-700 font-semibold"
                               : "bg-white hover:bg-gray-50 border-gray-100 hover:border-gray-200 text-gray-600 hover:text-gray-900"
-                          }`}
+                            }`}
                         >
                           <span className="text-xs font-mono">Room Code: {room.slug}</span>
                           {isCurrent && (
@@ -804,7 +1008,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
         {error && (
           <div className="w-full flex items-center justify-between bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-2xl shadow-xl pointer-events-auto animate-in fade-in duration-200">
             <span className="text-xs font-semibold">{error}</span>
-            <button 
+            <button
               onClick={() => setError(null)}
               className="text-red-400 hover:text-red-600 transition-colors p-1"
             >
@@ -837,10 +1041,10 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       </div>
 
       {/* AI Request Input Bar */}
-      {myRole !== "Viewer" && (
+      {myRole !== "Viewer" && !isReplayMode && (
         <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-lg px-4 sm:px-0">
-          <form 
-            onSubmit={handlePromptSubmit} 
+          <form
+            onSubmit={handlePromptSubmit}
             className="flex items-center space-x-2 bg-white/90 backdrop-blur-md border border-gray-200/50 shadow-2xl rounded-2xl p-1.5 transition-all duration-300 hover:shadow-indigo-100/40 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100"
           >
             <input
@@ -915,6 +1119,137 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
             }
           }}
         />
+      )}
+      {/* Replay Control Bar */}
+      {isReplayMode && (
+        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-xl px-4 sm:px-0">
+          <div className="bg-white/85 backdrop-blur-xl border border-indigo-100/80 shadow-[0_20px_50px_rgba(79,70,229,0.15)] rounded-3xl p-5 flex flex-col space-y-4 transition-all duration-300">
+            {/* Header info */}
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
+                  Event Replay Mode
+                </span>
+                <span className="text-xs font-semibold text-gray-700 mt-0.5">
+                  Step {replayCurrentIndex + 1} of {replayEvents.length}
+                </span>
+              </div>
+              <div className="text-xs font-medium text-gray-500 max-w-[280px] truncate bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5" title={replayEvents[replayCurrentIndex]?.description}>
+                {replayEvents[replayCurrentIndex]?.description || "Empty room - no events recorded"}
+              </div>
+            </div>
+
+            {/* Scrubber slider */}
+            <div className="flex items-center space-x-3 group">
+              <span className="text-[10px] font-bold text-gray-400 select-none w-8 text-center font-mono">START</span>
+              <input
+                type="range"
+                min={-1}
+                max={replayEvents.length - 1}
+                value={replayCurrentIndex}
+                onChange={(e) => {
+                  const val = Number(e.target.value);
+                  setReplayCurrentIndex(val);
+                  const shapes = computeReplayShapes(replayEvents, val);
+                  game?.setReplayShapes(shapes);
+                }}
+                className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-indigo-600 outline-none transition-all focus:ring-2 focus:ring-indigo-100"
+              />
+              <span className="text-[10px] font-bold text-gray-400 select-none w-8 text-center font-mono">END</span>
+            </div>
+
+            {/* Controls */}
+            <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center space-x-3">
+                {/* Back button */}
+                <button
+                  onClick={() => {
+                    if (replayCurrentIndex <= -1) return;
+                    setReplayIsPlaying(false);
+                    setReplayCurrentIndex(prev => {
+                      const next = prev - 1;
+                      const shapes = computeReplayShapes(replayEvents, next);
+                      game?.setReplayShapes(shapes);
+                      return next;
+                    });
+                  }}
+                  disabled={replayCurrentIndex <= -1}
+                  className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-100/80 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all cursor-pointer border border-transparent hover:border-gray-200"
+                  title="Previous Step"
+                >
+                  <SkipBack className="w-4 h-4" />
+                </button>
+
+                {/* Play/Pause button */}
+                <button
+                  onClick={() => {
+                    if (replayCurrentIndex >= replayEvents.length - 1) {
+                      // Restart playback if at the end
+                      setReplayCurrentIndex(-1);
+                      game?.setReplayShapes([]);
+                    }
+                    setReplayIsPlaying(!replayIsPlaying);
+                  }}
+                  className="p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow-lg hover:shadow-indigo-500/35 transition-all duration-200 active:scale-95 cursor-pointer flex items-center justify-center"
+                  title={replayIsPlaying ? "Pause Playback" : "Start Playback"}
+                >
+                  {replayIsPlaying ? (
+                    <Pause className="w-4.5 h-4.5 fill-white stroke-white" />
+                  ) : (
+                    <Play className="w-4.5 h-4.5 fill-white stroke-white ml-0.5" />
+                  )}
+                </button>
+
+                {/* Forward button */}
+                <button
+                  onClick={() => {
+                    if (replayCurrentIndex >= replayEvents.length - 1) return;
+                    setReplayIsPlaying(false);
+                    setReplayCurrentIndex(prev => {
+                      const next = prev + 1;
+                      const shapes = computeReplayShapes(replayEvents, next);
+                      game?.setReplayShapes(shapes);
+                      return next;
+                    });
+                  }}
+                  disabled={replayCurrentIndex >= replayEvents.length - 1}
+                  className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-100/80 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all cursor-pointer border border-transparent hover:border-gray-200"
+                  title="Next Step"
+                >
+                  <SkipForward className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Speed Controller */}
+              <div className="flex items-center space-x-1.5 bg-gray-100/80 border border-gray-200/30 p-1.5 rounded-2xl text-[10px] font-bold text-gray-500">
+                {[1000, 500, 200, 50].map((speed, idx) => {
+                  const label = ["0.5x", "1x", "2.5x", "10x"][idx];
+                  return (
+                    <button
+                      key={speed}
+                      onClick={() => setReplaySpeed(speed)}
+                      className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer select-none ${
+                        replaySpeed === speed
+                          ? "bg-white text-indigo-600 shadow-sm border border-gray-200/10 font-extrabold"
+                          : "hover:bg-white/40 hover:text-gray-700"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Stop / Exit */}
+              <button
+                onClick={stopReplayMode}
+                className="px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-100 hover:border-red-200 text-red-600 hover:text-red-700 font-semibold rounded-2xl text-xs transition-all duration-200 active:scale-95 cursor-pointer shadow-sm"
+              >
+                Exit Replay
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -25,16 +25,19 @@ model User {
   createdShapes Shapes[]   @relation("createdByUser")
   updatedShapes Shapes[]   @relation("updatedByUser")
   roomUsers     roomUser[]
+
+  roomEvents roomEvents[]
 }
 
 model Room {
-  id        Int        @id @default(autoincrement())
-  slug      Int        @unique
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  chats     Chat[]
-  Shapes    Shapes[]
-  roomUsers roomUser[]
+  id         Int          @id @default(autoincrement())
+  slug       Int          @unique
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  chats      Chat[]
+  Shapes     Shapes[]
+  roomUsers  roomUser[]
+  roomEvents roomEvents[]
 }
 
 model roomUser {
@@ -61,19 +64,48 @@ model Chat {
 }
 
 model Shapes {
-  id              Int      @id @default(autoincrement())
+  id              Int          @id @default(autoincrement())
   roomId          Int
-  createdAt       DateTime @default(now())
+  createdAt       DateTime     @default(now())
   shape           String
   createdByUserId String
   updatedByUserId String
-  room            Room     @relation(fields: [roomId], references: [id])
-  createdByUser   User     @relation("createdByUser", fields: [createdByUserId], references: [id])
-  updatedByUser   User     @relation("updatedByUser", fields: [updatedByUserId], references: [id])
+  room            Room         @relation(fields: [roomId], references: [id])
+  createdByUser   User         @relation("createdByUser", fields: [createdByUserId], references: [id])
+  updatedByUser   User         @relation("updatedByUser", fields: [updatedByUserId], references: [id])
+}
+
+model roomEvents {
+  id             Int       @id @default(autoincrement())
+  roomId         Int
+  sequenceNumber Int
+  eventType      EventType
+  description    String?
+  shapeId        Int
+  userId         String
+  payload        String
+  createdAt      DateTime  @default(now())
+  room           Room      @relation(fields: [roomId], references: [id])
+  user           User      @relation(fields: [userId], references: [id])
+
+  @@unique([roomId, sequenceNumber])
 }
 
 enum role {
   Viewer
   Editor
   Owner
+}
+
+enum EventType {
+  CREATE_SHAPE
+  DELETE_SHAPE
+  MOVE_SHAPE
+  ROTATE_SHAPE
+  SCALE_SHAPE
+  CHANGE_FILL
+  CHANGE_STROKE
+  CHANGE_LAYER
+  CHANGE_TEXT
+  ADD_IMAGE
 }

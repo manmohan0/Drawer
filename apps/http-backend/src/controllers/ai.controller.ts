@@ -12,7 +12,7 @@ export const generateShapes = async (req: Request, res: Response) => {
             systemInstruction: `You are an shapes drawing agent who draws shapes on canvas. You will send the shapes in a certain format of this schema
                 export type Shape = {
                     id?: number;
-                    type: 'rect';
+                    type: 'rectangle';
                     startX: number;
                     startY: number;
                     width: number;
