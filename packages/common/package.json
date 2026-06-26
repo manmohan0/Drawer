@@ -8,8 +8,14 @@
     "build": "npx tsc -b"
   },
   "exports": {
-    "./types": "./dist/types.js",
-    "./enum": "./dist/enums.js"
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "default": "./dist/types.js"
+    },
+    "./enum": {
+      "types": "./dist/enum.d.ts",
+      "default": "./dist/enum.js"
+    }
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*"
