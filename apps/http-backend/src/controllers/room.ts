@@ -35,8 +35,8 @@ export const getMyRooms = async (req: Request, res: Response) => {
       },
     });
 
-    const roomsWithAdmin = myRooms.map((room) => {
-      const ownerEntry = room.roomUsers.find((ru) => ru.role === "Owner");
+    const roomsWithAdmin = myRooms.map((room: any) => {
+      const ownerEntry = room.roomUsers.find((ru: any) => ru.role === "Owner");
       return {
         id: room.id,
         slug: room.slug,
@@ -180,13 +180,13 @@ export const getChatsBySlug = async (req: Request, res: Response) => {
       return;
     }
 
-    const myRole = room.roomUsers.find((ru) => ru.userId === req.userId)?.role;
+    const myRole = room.roomUsers.find((ru: any) => ru.userId === req.userId)?.role;
 
     if (!myRole) {
       return res.status(403).json({ success: false, message: "You cannot join the room because role not found" });
     }
 
-    const owners = room.roomUsers.filter((ru) => ru.role === "Owner").map((ru) => ru.user)[0];
+    const owners = room.roomUsers.filter((ru: any) => ru.role === "Owner").map((ru: any) => ru.user)[0];
     const mappedRoom = {
       id: room.id,
       slug: room.slug,
@@ -220,7 +220,7 @@ export const getExistingShapesById = async (req: Request, res: Response) => {
       }
     })
 
-    const correctShapes = shapes.map(shape => {
+    const correctShapes = shapes.map((shape: any) => {
       const curShape = {
         id: shape.id,
         userId: shape.createdByUserId,
@@ -272,14 +272,14 @@ export const getRoomMembersAndData = async (req: Request, res: Response) => {
       return;
     }
 
-    const owner = room.roomUsers.find((ru) => ru.role === "Owner");
+    const owner = room.roomUsers.find((ru: any) => ru.role === "Owner");
     const mappedRoom = {
       id: room.id,
       slug: room.slug,
       createdAt: room.createdAt,
       updatedAt: room.updatedAt,
       admin: owner ? owner.user : null,
-      members: room.roomUsers.map((ru) => ({
+      members: room.roomUsers.map((ru: any) => ({
         userId: ru.userId,
         role: ru.role,
         firstName: ru.user.firstName,

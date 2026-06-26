@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import { JWT_SECRET } from "@repo/backend-common/config";
 
 interface CustomJwtPayload {
   userId: string;
@@ -14,7 +15,7 @@ export const authMiddleware = (
   try {
     const decodedUser = jwt.verify(
       authToken,
-      process.env.JWT_SECRET as string,
+      JWT_SECRET,
     ) as CustomJwtPayload;
 
     if (!decodedUser || !decodedUser.userId) {
