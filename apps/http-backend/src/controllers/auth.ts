@@ -76,10 +76,12 @@ export const signIn = async (req: Request, res: Response) => {
 
   const authToken = jwt.sign({ userId: user.id }, JWT_SECRET);
 
+  const isProd = process.env.NODE_ENV === "production" || req.headers["x-forwarded-proto"] === "https";
+
   res.cookie("Authorization", authToken, {
     httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
     maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
   });
 
