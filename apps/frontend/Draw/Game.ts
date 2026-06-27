@@ -1,5 +1,5 @@
 import { BACKEND_URL } from "@/config";
-import { role, selector, Shape, ShapeType } from "@/types";
+import { HistoryAction, role, selector, Shape, ShapeType } from "@/types";
 import axios from "axios";
 import { EventType } from "@repo/common/enum";
 
@@ -61,6 +61,15 @@ export class Game {
   private users: Record<string, { firstName: string, lastName: string }> = {};
   private myUserId: string | null = null;
   private myRole: role | null = null;
+  // Stacks to store the history of shapes that can be undone/redone
+  private undoStack: HistoryAction[] = [];
+  private redoStack: HistoryAction[] = [];
+  // Map to track asynchronous shape recreations by their temporary transaction IDs
+  private pendingHistoryMap: Map<string, HistoryAction> = new Map();
+  private isUndoingRedoing: boolean = false;
+  // A list of callback listeners to notify React when the stacks update
+  private onHistoryChangeCallbacks: Set<() => void> = new Set();
+
   private onSelectionChange?: (shape: Shape | null) => void;
   public onMouseMove?: (x: number, y: number) => void;
   public onRoleChange?: (role: role) => void;
@@ -109,10 +118,6 @@ export class Game {
     }
   };
 
-  setMyRole = (role: role) => {
-    this.myRole = role;
-  }
-
   /**
    * Gets the currently active drawing tool.
    * @returns The active ShapeType.
@@ -120,6 +125,32 @@ export class Game {
   getTool = () => {
     return this.selectedTool;
   };
+
+  setMyRole = (role: role) => {
+    this.myRole = role;
+  }
+
+  // Subscribes a React component to stack changes
+  public subscribeHistoryChange(callback: () => void) {
+    this.onHistoryChangeCallbacks.add(callback);
+    return () => {
+      this.onHistoryChangeCallbacks.delete(callback);
+    };
+  }
+
+  // Calls all registered callbacks to force React components to re-render
+  private triggerHistoryChange() {
+    this.onHistoryChangeCallbacks.forEach((cb) => cb());
+  }
+
+  // Helper methods returning if history is available
+  public canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
+  public canRedo(): boolean {
+    return this.redoStack.length > 0;
+  }
 
   getZoom = () => {
     return this.zoom;
@@ -146,6 +177,119 @@ export class Game {
     this.selectedColor = color;
   };
 
+  public undo() {
+    if (this.myRole === "Viewer") return;
+    if (this.undoStack.length === 0) return;
+
+    const action = this.undoStack.pop();
+
+    if (!action) return;
+
+    this.redoStack.push(action);
+
+    if (action.type === "create") {
+      this.ws.send(JSON.stringify({
+        type: 'delete_shape',
+        roomId: this.roomId,
+        shapeId: action.shapeId,
+      }));
+
+      if (this.selectedShape?.id === action.shapeId) {
+        this.selectedShape = null;
+        this.rotateIconLocation = null;
+        this.shapeSelectors = [];
+        this.triggerSelectionChange();
+      }
+    } else if (action.type === "update") {
+      this.ws.send(JSON.stringify({
+        type: "update_shape",
+        roomId: this.roomId,
+        shapeId: action.shapeId,
+        shape: JSON.stringify(action.before),
+        updatedBy: this.myUserId
+      }));
+
+      const undoShapeId = this.existingShapes.findIndex((shape) => shape.id === action.shapeId);
+      if (undoShapeId !== -1) {
+        this.existingShapes[undoShapeId] = action.before;
+        if (this.selectedShape?.id === action.shapeId) {
+          this.selectedShape = action.before;
+          this.updateSelectors(action.before);
+          this.triggerSelectionChange();
+        }
+        this.clearCanvas();
+      }
+    } else if (action.type === "delete") {
+      const tempHistoryId = Math.random().toString(36).substring(2, 9);
+      this.pendingHistoryMap.set(tempHistoryId, action);
+      const taggedShape = { ...action.shape, tempHistoryId };
+
+      this.ws.send(JSON.stringify({
+        type: "chat",
+        roomId: this.roomId,
+        shape: JSON.stringify(taggedShape),
+        userId: this.myUserId,
+      }));
+    }
+    this.triggerHistoryChange();
+  }
+
+  public redo() {
+    if (this.myRole === "Viewer") return;
+    if (this.redoStack.length === 0) return;
+
+    const action = this.redoStack.pop();
+
+    if (!action) return;
+
+    this.undoStack.push(action);
+
+    if (action.type === "create") {
+      const tempHistoryId = Math.random().toString(36).substring(2, 9);
+      this.pendingHistoryMap.set(tempHistoryId, action);
+      const taggedShape = { ...action.shape, tempHistoryId };
+
+      this.ws.send(JSON.stringify({
+        type: "chat",
+        roomId: this.roomId,
+        shape: JSON.stringify(taggedShape),
+        userId: this.myUserId,
+      }))
+    } else if (action.type === "update") {
+      this.ws.send(JSON.stringify({
+        type: "update_shape",
+        roomId: this.roomId,
+        shapeId: action.shapeId,
+        shape: JSON.stringify(action.after),
+        updatedBy: this.myUserId,
+      }));
+
+      const redoShapeId = this.existingShapes.findIndex(shape => shape.id === action.shapeId);
+
+      if (redoShapeId !== -1) {
+        this.existingShapes[redoShapeId] = action.after;
+        if (this.selectedShape?.id === action.shapeId) {
+          this.selectedShape = action.after;
+          this.updateSelectors(action.after);
+          this.triggerSelectionChange();
+        }
+        this.clearCanvas();
+      }
+    } else if (action.type === "delete") {
+      this.ws.send(JSON.stringify({
+        type: "delete_shape",
+        roomId: this.roomId,
+        shapeId: action.shapeId,
+      }));
+
+      if (this.selectedShape?.id === action.shapeId) {
+        this.selectedShape = null;
+        this.shapeSelectors = [];
+        this.triggerSelectionChange();
+      }
+    }
+    this.triggerHistoryChange();
+  }
   /**
    * Helper to get the bounding box of a shape.
    */
@@ -204,9 +348,13 @@ export class Game {
     shape2FromZ?: number
   ) => {
     let changed = false;
+    let beforeShape1: Shape | null = null;
+    let beforeShape2: Shape | null = null;
+
     if (shape1.id) {
       const idx = this.existingShapes.findIndex((s) => s.id === shape1.id);
       if (idx !== -1) {
+        beforeShape1 = { ...this.existingShapes[idx] };
         this.existingShapes[idx] = shape1;
         this.ws.send(
           JSON.stringify({
@@ -225,6 +373,7 @@ export class Game {
     if (shape2.id) {
       const idx = this.existingShapes.findIndex((s) => s.id === shape2.id);
       if (idx !== -1) {
+        beforeShape2 = { ...this.existingShapes[idx] };
         this.existingShapes[idx] = shape2;
         this.ws.send(
           JSON.stringify({
@@ -241,6 +390,27 @@ export class Game {
       }
     }
     if (changed) {
+      if (!this.isUndoingRedoing) {
+        if (beforeShape1 && shape1.id) {
+          this.undoStack.push({
+            type: "update",
+            shapeId: shape1.id,
+            before: beforeShape1,
+            after: { ...shape1 }
+          });
+        }
+        if (beforeShape2 && shape2.id) {
+          this.undoStack.push({
+            type: "update",
+            shapeId: shape2.id,
+            before: beforeShape2,
+            after: { ...shape2 }
+          });
+        }
+        this.redoStack = [];
+        this.triggerHistoryChange();
+      }
+
       this.existingShapes.sort((a, b) => {
         const zA = (a.zIndex || 0);
         const zB = (b.zIndex || 0);
@@ -456,11 +626,27 @@ export class Game {
 
         const tempImg = new Image();
         tempImg.onload = () => {
+          const beforeShape = { ...shape };
+
           shape.url = base64Url;
           if (tempImg.width && tempImg.height) {
             const aspect = tempImg.width / tempImg.height;
             shape.height = shape.width / aspect;
           }
+
+          const afterShape = { ...shape };
+
+          if (!this.isUndoingRedoing && shape.id) {
+            this.undoStack.push({
+              type: "update",
+              shapeId: shape.id,
+              before: beforeShape,
+              after: { ...afterShape },
+            });
+            this.redoStack = [];
+            this.triggerHistoryChange();
+          }
+
           const delta = {
             url: shape.url,
             height: shape.height
@@ -1036,6 +1222,17 @@ export class Game {
       if (didChange) {
         selectedShape.updatedByUserId = this.myUserId || undefined;
 
+        if (!this.isUndoingRedoing && selectedShape.id) {
+          this.undoStack.push({
+            type: "update",
+            shapeId: selectedShape.id,
+            before: originalShape,
+            after: { ...selectedShape },
+          });
+          this.redoStack = [];
+          this.triggerHistoryChange();
+        }
+
         let extraFields: Record<string, any> = {};
         if (eventType === "MOVE_SHAPE") {
           if (selectedShape.type === "circle" && originalShape.type === "circle") {
@@ -1254,8 +1451,22 @@ export class Game {
       if (shape.type !== "rectangle" && shape.type !== "circle") return;
 
       const fromColor = shape.bg_color || "";
+      const beforeShape = { ...shape };
+
       shape.bg_color = this.selectedColor;
       shape.updatedByUserId = this.myUserId || undefined;
+      const afterShape = { ...shape };
+
+      if (!this.isUndoingRedoing && shape.id) {
+        this.undoStack.push({
+          type: "update",
+          shapeId: shape.id,
+          before: beforeShape,
+          after: { ...afterShape },
+        });
+        this.redoStack = [];
+        this.triggerHistoryChange();
+      }
 
       this.ws.send(
         JSON.stringify({
@@ -1408,6 +1619,22 @@ export class Game {
   oneTimeKeyboardPressHandler = (e: KeyboardEvent) => {
     if (e.repeat) return;
 
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      if (e.shiftKey) {
+        this.redo();
+      } else {
+        this.undo();
+      }
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+      e.preventDefault();
+      this.redo();
+      return;
+    }
+
     if (e.key === 'Delete') {
       if (this.selectedShape) {
         this.deleteSelectedShape();
@@ -1431,6 +1658,18 @@ export class Game {
       updatedShape.updatedByUserId = this.myUserId || undefined;
       const shapeIndex = this.existingShapes.findIndex((s) => s.id === updatedShape.id);
       if (shapeIndex !== -1) {
+
+        if (!this.isUndoingRedoing) {
+          this.undoStack.push({
+            type: "update",
+            shapeId: updatedShape.id,
+            before: { ...this.existingShapes[shapeIndex] },
+            after: { ...updatedShape }
+          })
+          this.redoStack = [];
+          this.triggerHistoryChange();
+        }
+
         this.existingShapes[shapeIndex] = updatedShape;
         this.selectedShape = updatedShape;
         this.updateSelectors(updatedShape);
@@ -1454,6 +1693,17 @@ export class Game {
   deleteSelectedShape = () => {
     if (this.myRole === "Viewer") return;
     if (!this.selectedShape) return;
+
+    if (!this.isUndoingRedoing && this.selectedShape) {
+      this.undoStack.push({
+        type: "delete",
+        shapeId: this.selectedShape.id as number,
+        shape: { ...this.selectedShape }
+      })
+      this.redoStack = [];
+      this.triggerHistoryChange();
+    }
+
     this.ws.send(
       JSON.stringify({
         type: "delete_shape",
@@ -1469,6 +1719,17 @@ export class Game {
   deleteShapeById = (id?: number) => {
     if (this.myRole === "Viewer") return;
     if (id === undefined) return;
+
+    const shape = this.existingShapes.find((s) => s.id === id);
+    if (!this.isUndoingRedoing && shape && shape.id) {
+      this.undoStack.push({
+        type: "delete",
+        shapeId: shape.id,
+        shape: { ...shape }
+      });
+      this.redoStack = [];
+      this.triggerHistoryChange();
+    }
     this.ws.send(
       JSON.stringify({
         type: "delete_shape",
@@ -1773,10 +2034,28 @@ export class Game {
           ...data.shape.shape,
         };
 
-        console.log(shape)
         this.existingShapes.push(shape);
         this.existingShapes.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
         this.clearCanvas();
+
+        if (data.userId === this.myUserId) {
+          const tempHistoryId = data.shape.shape?.tempHistoryId;
+          if (tempHistoryId && this.pendingHistoryMap.has(tempHistoryId)) {
+            const action = this.pendingHistoryMap.get(tempHistoryId)!;
+            action.shapeId = shape.id;
+            action.shape = shape;
+            delete (action.shape as any).tempHistoryId;
+            this.pendingHistoryMap.delete(tempHistoryId);
+          } else {
+            this.undoStack.push({
+              type: "create",
+              shapeId: shape.id,
+              shape: { ...shape }
+            });
+            this.redoStack = [];
+          }
+          this.triggerHistoryChange();
+        }
       }
 
       // Remote user modified a shape
@@ -1811,6 +2090,12 @@ export class Game {
           }
           this.clearCanvas();
         }
+
+        if (data.from !== this.myUserId) {
+          this.undoStack = this.undoStack.filter(action => action.shapeId !== data.shapeId);
+          this.redoStack = this.redoStack.filter(action => action.shapeId !== data.shapeId);
+          this.triggerHistoryChange();
+        }
       }
 
       // Remote user cleared the canvas
@@ -1819,8 +2104,10 @@ export class Game {
         this.selectedShape = null;
         this.shapeSelectors = [];
         this.rotateIconLocation = null;
+        this.undoStack = [];
+        this.redoStack = [];
+        this.triggerHistoryChange();
         this.clearCanvas();
-        this.triggerSelectionChange();
       }
 
       if (data.type === "coordinates_received") {

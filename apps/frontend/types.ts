@@ -69,6 +69,22 @@ export type selector = {
     angle?: number;
 }
 
+export type HistoryAction = {
+        type: "create";
+        shapeId: number;
+        shape: Shape;
+    } | {
+        type: "update";
+        shapeId: number;
+        before: Shape;
+        after: Shape;
+    } | {
+        type: "delete";
+        shapeId: number;
+        shape: Shape;
+    };
+
+
 export type ShapeType = 'rectangle' | 'line' | 'circle' | 'image' | 'pointer' | 'bucket' | 'text';
 
 export type role = "Viewer" | "Editor" | "Owner";

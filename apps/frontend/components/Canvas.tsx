@@ -2,7 +2,7 @@ import { BACKEND_URL } from "@/config";
 import { Game } from "@/Draw/Game";
 import { role, Shape, ShapeType } from "@/types";
 import axios from "axios";
-import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2, PaintBucket, ArrowUp, ArrowDown, Type, LogOut, ChevronDown, Folder, Eye, Play, Pause, SkipBack, SkipForward, UserMinus } from "lucide-react";
+import { Circle, PencilLine, Pointer, RectangleHorizontal, Image, Trash2, User, Hash, Sparkles, Check, X, Loader2, PaintBucket, ArrowUp, ArrowDown, Type, LogOut, ChevronDown, Folder, Eye, Play, Pause, SkipBack, SkipForward, UserMinus, Undo, Redo } from "lucide-react";
 import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getCookie, deleteCookie } from "@/utils/cookie";
@@ -25,6 +25,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   const [activeUsers, setActiveUsers] = useState<Record<string, { firstName: string; lastName: string }>>({});
   const [isShapeDetailsCollapsed, setIsShapeDetailsCollapsed] = useState(false);
   const [isMembersListCollapsed, setIsMembersListCollapsed] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   const fetchRooms = async () => {
     setRoomsLoading(true);
@@ -167,6 +169,23 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
 
     return () => clearTimeout(timer);
   }, [replayIsPlaying, replayCurrentIndex, replaySpeed, replayEvents, game]);
+
+  useEffect(() => {
+    if (!game) return;
+
+    const unsubscribe = game.subscribeHistoryChange(() => {
+      setCanUndo(game.canUndo());
+      setCanRedo(game.canRedo());
+    });
+
+    setCanUndo(game.canUndo());
+    setCanRedo(game.canRedo());
+
+    return () => {
+      unsubscribe();
+    };
+  }, [game]);
+
 
   const startReplayMode = async () => {
     if (!game) return;
@@ -625,8 +644,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                   <div
                     key={idx}
                     className={`flex flex-col p-2 rounded-xl bg-gray-50/70 border border-gray-100 transition-all duration-200 hover:bg-white hover:border-indigo-100 hover:shadow-sm ${metric.label === "Area" || metric.label === "Length" || metric.label === "Circumference" || metric.label === "URL Status" || metric.key === "text"
-                        ? "col-span-2"
-                        : ""
+                      ? "col-span-2"
+                      : ""
                       }`}
                   >
                     <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
@@ -691,8 +710,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                           onClick={() => handleColorChange("bg_color", "")}
                           disabled={myRole === "Viewer"}
                           className={`px-2 py-1 text-[10px] font-semibold border rounded-lg transition-all ${!selectedShape.bg_color
-                              ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm"
-                              : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                            ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm"
+                            : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
                             } disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                           Transparent
@@ -724,8 +743,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                     <span>Created by:</span>
                   </div>
                   <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${creatorName === "You"
-                      ? "bg-indigo-50 text-indigo-600 border border-indigo-100"
-                      : "bg-gray-100 text-gray-600"
+                    ? "bg-indigo-50 text-indigo-600 border border-indigo-100"
+                    : "bg-gray-100 text-gray-600"
                     }`}>
                     {creatorName || "Unknown"}
                   </span>
@@ -736,8 +755,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                     <span>Updated by:</span>
                   </div>
                   <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${updaterName === "You"
-                      ? "bg-indigo-50 text-indigo-600 border border-indigo-100"
-                      : "bg-gray-100 text-gray-600"
+                    ? "bg-indigo-50 text-indigo-600 border border-indigo-100"
+                    : "bg-gray-100 text-gray-600"
                     }`}>
                     {updaterName || creatorName || "Unknown"}
                   </span>
@@ -812,6 +831,37 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               style={{ backgroundColor: color }}
             />
           </div>
+
+          {/* Undo Button */}
+          <button
+            onClick={() => game?.undo()}
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+            className={`p-1.5 rounded transition-colors ${
+              canUndo 
+                ? "text-gray-600 hover:bg-gray-100 cursor-pointer" 
+                : "text-gray-300 cursor-not-allowed"
+            }`}
+          >
+            <Undo className="w-4 h-4" />
+          </button>
+
+          {/* Redo Button */}
+          <button
+            onClick={() => game?.redo()}
+            disabled={!canRedo}
+            title="Redo (Ctrl+Y)"
+            className={`p-1.5 rounded transition-colors ${
+              canRedo 
+                ? "text-gray-600 hover:bg-gray-100 cursor-pointer" 
+                : "text-gray-300 cursor-not-allowed"
+            }`}
+          >
+            <Redo className="w-4 h-4" />
+          </button>
+
+          {/* Divider */}
+          <div className="h-6 w-px bg-gray-300 self-center"></div>
 
           <div
             onClick={clearCanvas}
@@ -946,8 +996,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                             setIsDropdownOpen(false);
                           }}
                           className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-left transition-all cursor-pointer ${isCurrent
-                              ? "bg-orange-50 border-orange-200 text-orange-700 font-semibold"
-                              : "bg-white hover:bg-gray-50 border-gray-100 hover:border-gray-200 text-gray-600 hover:text-gray-900"
+                            ? "bg-orange-50 border-orange-200 text-orange-700 font-semibold"
+                            : "bg-white hover:bg-gray-50 border-gray-100 hover:border-gray-200 text-gray-600 hover:text-gray-900"
                             }`}
                         >
                           <span className="text-xs font-mono">Room Code: {room.slug}</span>
@@ -1269,11 +1319,10 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                     <button
                       key={speed}
                       onClick={() => setReplaySpeed(speed)}
-                      className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer select-none ${
-                        replaySpeed === speed
-                          ? "bg-white text-indigo-600 shadow-sm border border-gray-200/10 font-extrabold"
-                          : "hover:bg-white/40 hover:text-gray-700"
-                      }`}
+                      className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer select-none ${replaySpeed === speed
+                        ? "bg-white text-indigo-600 shadow-sm border border-gray-200/10 font-extrabold"
+                        : "hover:bg-white/40 hover:text-gray-700"
+                        }`}
                     >
                       {label}
                     </button>
