@@ -116,6 +116,9 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   const [replayCurrentIndex, setReplayCurrentIndex] = useState(-1);
   const [replayIsPlaying, setReplayIsPlaying] = useState(false);
   const [replaySpeed, setReplaySpeed] = useState(500); // ms delay
+  const [gridSpacing, setGridSpacing] = useState<number>(20);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
 
   const computeReplayShapes = (eventsList: any[], targetIndex: number): Shape[] => {
     const shapesMap = new Map<number, Shape>();
@@ -180,6 +183,22 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
 
     setCanUndo(game.canUndo());
     setCanRedo(game.canRedo());
+
+    return () => {
+      unsubscribe();
+    };
+  }, [game]);
+
+  useEffect(() => {
+    if (!game) return;
+
+    const unsubscribe = game.subscribeViewportChange(() => {
+      setPan({ x: game.panX, y: game.panY });
+      setZoom(game.zoom);
+    });
+
+    setPan({ x: game.panX, y: game.panY });
+    setZoom(game.zoom);
 
     return () => {
       unsubscribe();
@@ -598,7 +617,11 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
         width={4320}
         height={2160}
         onMouseLeave={() => setMousePos(null)}
-        className="bg-[radial-gradient(circle_at_center,#73737330_2px,transparent_1px)] bg-white bg-size-[20px_20px] border-2 border-black"
+        style={{
+          backgroundPosition: `${pan.x}px ${pan.y}px`,
+          backgroundSize: `${gridSpacing * zoom}px ${gridSpacing * zoom}px`,
+        }}
+        className="bg-[radial-gradient(circle_at_center,#73737330_2px,transparent_1px)] bg-white"
       ></canvas>
 
       {/* Mouse coordinates indicator */}
@@ -837,11 +860,10 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
             onClick={() => game?.undo()}
             disabled={!canUndo}
             title="Undo (Ctrl+Z)"
-            className={`p-1.5 rounded transition-colors ${
-              canUndo 
-                ? "text-gray-600 hover:bg-gray-100 cursor-pointer" 
+            className={`p-1.5 rounded transition-colors ${canUndo
+                ? "text-gray-600 hover:bg-gray-100 cursor-pointer"
                 : "text-gray-300 cursor-not-allowed"
-            }`}
+              }`}
           >
             <Undo className="w-4 h-4" />
           </button>
@@ -851,11 +873,10 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
             onClick={() => game?.redo()}
             disabled={!canRedo}
             title="Redo (Ctrl+Y)"
-            className={`p-1.5 rounded transition-colors ${
-              canRedo 
-                ? "text-gray-600 hover:bg-gray-100 cursor-pointer" 
+            className={`p-1.5 rounded transition-colors ${canRedo
+                ? "text-gray-600 hover:bg-gray-100 cursor-pointer"
                 : "text-gray-300 cursor-not-allowed"
-            }`}
+              }`}
           >
             <Redo className="w-4 h-4" />
           </button>

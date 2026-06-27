@@ -32,9 +32,9 @@ export class Game {
   // Y-coordinate of the mouse cursor when a drag or draw interaction starts
   private startY: number = 0;
   // Current horizontal translation (panning offset) of the canvas viewport
-  private panX: number = 0;
+  public panX: number = 0;
   // Current vertical translation (panning offset) of the canvas viewport
-  private panY: number = 0;
+  public panY: number = 0;
   // Flag indicating if viewport panning mode (activated by holding Spacebar) is active
   private isPan: boolean = false;
   // The active tool selected in the toolbar (e.g., 'rectangle', 'circle', 'line', 'pointer')
@@ -48,13 +48,12 @@ export class Game {
   private isRotating: boolean = false;
   private focusAnimationId: number | null = null;
   private coordinateUpdateTimeout: any = null;
-
   // The specific selector handle being dragged, or null if not dragging any handle
   private draggedSelector: selector | null = null;
   // Copy of the selected shape state when a drag/resize action begins (to compute relative delta changes)
   private originalShape: Shape | null = null;
   // Current zoom level of the viewport (default is 1x scale)
-  private zoom: number = 1;
+  public zoom: number = 1;
   // Cache for loaded images to draw them synchronously
   private imageCache: Map<string, HTMLImageElement> = new Map();
   //map of userIds and their details
@@ -73,6 +72,10 @@ export class Game {
   private isUndoingRedoing: boolean = false;
   // A list of callback listeners to notify React when the stacks update
   private onHistoryChangeCallbacks: Set<() => void> = new Set();
+  private lastTriggeredPanX = 0;
+  private lastTriggeredPanY = 0;
+  private lastTriggeredZoom = 1;
+  private onViewportChangeCallbacks: Set<() => void> = new Set();
 
   private onSelectionChange?: (shape: Shape | null) => void;
   public onMouseMove?: (x: number, y: number) => void;
@@ -134,6 +137,21 @@ export class Game {
     this.myRole = role;
   }
 
+  screenToWorld = (screenX: number, screenY: number) => {
+    return {
+      x: (screenX - this.panX) / this.zoom,
+      y: (screenY - this.panY) / this.zoom,
+    };
+  };
+
+  // World -> Screen (e.g., to calculate selector borders on screen)
+  worldToScreen = (worldX: number, worldY: number) => {
+    return {
+      x: worldX * this.zoom + this.panX,
+      y: worldY * this.zoom + this.panY,
+    };
+  };
+
   // Subscribes a React component to stack changes
   public subscribeHistoryChange(callback: () => void) {
     this.onHistoryChangeCallbacks.add(callback);
@@ -145,6 +163,26 @@ export class Game {
   // Calls all registered callbacks to force React components to re-render
   private triggerHistoryChange() {
     this.onHistoryChangeCallbacks.forEach((cb) => cb());
+  }
+
+  public subscribeViewportChange(callback: () => void) {
+    this.onViewportChangeCallbacks.add(callback);
+    return () => {
+      this.onViewportChangeCallbacks.delete(callback);
+    };
+  }
+
+  private triggerViewportChange() {
+    if (
+      this.panX !== this.lastTriggeredPanX ||
+      this.panY !== this.lastTriggeredPanY ||
+      this.zoom !== this.lastTriggeredZoom
+    ) {
+      this.lastTriggeredPanX = this.panX;
+      this.lastTriggeredPanY = this.panY;
+      this.lastTriggeredZoom = this.zoom;
+      this.onViewportChangeCallbacks.forEach((cb) => cb());
+    }
   }
 
   // Helper methods returning if history is available
@@ -544,12 +582,7 @@ export class Game {
    */
   getMousePos = (e: MouseEvent) => {
     const rect = this.canvas.getBoundingClientRect();
-    // 1. Convert client coordinates to canvas-relative coordinates
-    // 2. Subtract the pan offsets to align with the translated viewport origin
-    // 3. Divide by the zoom factor to scale correctly based on current zoom level
-    const x = (e.clientX - rect.left - this.panX) / this.zoom;
-    const y = (e.clientY - rect.top - this.panY) / this.zoom;
-    return { x, y };
+    return this.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
   };
 
   /**
@@ -739,10 +772,12 @@ export class Game {
   updateScreenCoordinates = () => {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-    const canvasStartX = -this.panX / this.zoom;
-    const canvasStartY = -this.panY / this.zoom;
-    const canvasEndX = (window.innerWidth - this.panX) / this.zoom;
-    const canvasEndY = (window.innerHeight - this.panY) / this.zoom;
+    const start = this.screenToWorld(0, 0);
+    const end = this.screenToWorld(window.innerWidth, window.innerHeight);
+    const canvasStartX = start.x;
+    const canvasStartY = start.y;
+    const canvasEndX = end.x;
+    const canvasEndY = end.y;
 
     this.ws.send(JSON.stringify({
       type: "change_screen_coordinates",
@@ -794,6 +829,14 @@ export class Game {
    */
   mouseDownHandler = (e: MouseEvent) => {
     if (this.replayShapes !== null) return;
+
+    if (e.button === 1) {
+      this.isPan = true;
+      this.isClicked = true;
+      this.updateScreenCoordinates();
+      return;
+    }
+
     this.isClicked = true;
     const { x, y } = this.getMousePos(e);
     this.startX = x;
@@ -1133,6 +1176,13 @@ export class Game {
    */
   mouseUpHandler = (e: MouseEvent) => {
     if (this.replayShapes !== null) return;
+
+    if (e.button === 1) {
+      this.isPan = false;
+      this.isClicked = false;
+      this.updateScreenCoordinates();
+      return;
+    }
     if (this.myRole === "Viewer") {
       this.isClicked = false;
       return;
@@ -1536,8 +1586,9 @@ export class Game {
         this.triggerImageUpload(hitResult);
       } else if (hitResult && hitResult !== "rotate" && hitResult.type === "text") {
         const canvasRect = this.canvas.getBoundingClientRect();
-        const screenX = canvasRect.left + (hitResult.startX * this.zoom + this.panX);
-        const screenY = canvasRect.top + (hitResult.startY * this.zoom + this.panY);
+        const screenPos = this.worldToScreen(hitResult.startX, hitResult.startY);
+        const screenX = canvasRect.left + screenPos.x;
+        const screenY = canvasRect.top + screenPos.y;
 
         this.editingTextShapeId = hitResult.id;
         this.clearCanvas();
@@ -1570,36 +1621,39 @@ export class Game {
 
   /**
    * Handles the mouse 'wheel' event.
-   * Performs responsive zooming aligned directly towards the user's cursor location.
+   * Performs responsive zooming when pinch-zooming (ctrlKey) and pans the canvas when scrolling.
    */
   mouseWheelHandler = (e: WheelEvent) => {
     e.preventDefault(); // Stop native page scroll action
-    const scaleFactor = 1 - e.deltaY * 0.001; // Scale factor based on wheel scroll delta
-    const newZoom = this.zoom * scaleFactor;
 
-    // Enforce zoom constraints (clamp values between 0.5x minimum and 5x maximum zoom)
-    if (newZoom < 0.5 || newZoom > 5) return;
+    if (e.ctrlKey) {
+      // 1. Pinch-to-zoom (Zoom-to-Cursor Algorithm)
+      const scaleFactor = 1 - e.deltaY * 0.001;
+      const newZoom = this.zoom * scaleFactor;
 
-    // Zoom-to-Cursor Algorithm:
-    // 1. Calculate the cursor's world space coordinate prior to updating the zoom value
-    const { x: mouseWorldX, y: mouseWorldY } = this.getMousePos(e);
+      // Enforce zoom constraints
+      if (newZoom < 0.5 || newZoom > 5) return;
 
-    // 2. Commit the new zoom scale
-    this.zoom = newZoom;
+      const { x: mouseWorldX, y: mouseWorldY } = this.getMousePos(e);
+      this.zoom = newZoom;
 
-    // 3. Adjust the pan coordinates so that the cursor stays on top of the exact same world coordinate.
-    // The screen client coordinates of the mouse have not changed:
-    const rect = this.canvas.getBoundingClientRect();
-    const mouseScreenX = e.clientX - rect.left;
-    const mouseScreenY = e.clientY - rect.top;
+      const rect = this.canvas.getBoundingClientRect();
+      const mouseScreenX = e.clientX - rect.left;
+      const mouseScreenY = e.clientY - rect.top;
 
-    // Calculate new pan positions: ScreenPosition - (WorldPosition * Zoom)
-    this.panX = mouseScreenX - mouseWorldX * this.zoom;
-    this.panY = mouseScreenY - mouseWorldY * this.zoom;
+      this.panX = mouseScreenX - mouseWorldX * this.zoom;
+      this.panY = mouseScreenY - mouseWorldY * this.zoom;
 
-    this.clearCanvas();
-    this.debouncedUpdateScreenCoordinates();
+      this.clearCanvas();
+      this.debouncedUpdateScreenCoordinates();
+    } else {
+      // 2. Trackpad / Scrollwheel Panning
+      this.panX -= e.deltaX;
+      this.panY -= e.deltaY;
+      this.clearCanvas();
+    }
   };
+
 
   /**
    * Handles the keyboard 'keydown' event.
@@ -2519,6 +2573,7 @@ export class Game {
         this.ctx.restore();
       }
     }
+    this.triggerViewportChange();
   };
 
   setReplayShapes = (replayShapes: Shape[] | null) => {
@@ -2544,8 +2599,8 @@ export class Game {
     this.canvas.removeEventListener("click", this.mouseClickHandler);
     this.canvas.removeEventListener("dblclick", this.mouseDoubleClickHandler);
     this.canvas.removeEventListener("wheel", this.mouseWheelHandler);
-    this.canvas.removeEventListener("keydown", this.keyboardDownHandler);
-    this.canvas.removeEventListener("keyup", this.keyboardUpHandler);
-    this.canvas.removeEventListener("keydown", this.oneTimeKeyboardPressHandler);
+    window.removeEventListener("keydown", this.keyboardDownHandler);
+    window.removeEventListener("keyup", this.keyboardUpHandler);
+    window.removeEventListener("keydown", this.oneTimeKeyboardPressHandler);
   };
 }
