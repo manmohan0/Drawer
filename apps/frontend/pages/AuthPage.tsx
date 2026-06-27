@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { BACKEND_URL } from "../config";
 import Link from "next/link";
+import { setCookie } from "../utils/cookie";
 
 export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
   const router = useRouter();
@@ -31,7 +32,10 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
           { withCredentials: true }
         );
         
-        // Cookie is set automatically by the backend Set-Cookie header
+        // Save the cookie client-side to bypass cross-site third-party cookie restrictions
+        if (res.data?.authToken) {
+          setCookie("Authorization", res.data.authToken);
+        }
         
         setSuccess("Signed in successfully! Redirecting...");
         setTimeout(() => {
