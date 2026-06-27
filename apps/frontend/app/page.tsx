@@ -144,12 +144,20 @@ export default function Home() {
                 <h2 className="text-xl font-bold text-zinc-200">Dashboard</h2>
                 <p className="text-xs text-zinc-500">Welcome back to Drawer</p>
               </div>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-700 rounded-xl transition-all cursor-pointer"
-              >
-                Sign Out
-              </button>
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/rooms"
+                  className="px-4 py-2 text-xs font-semibold bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-xl transition-all cursor-pointer"
+                >
+                  Go to Rooms
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-700 rounded-xl transition-all cursor-pointer"
+                >
+                  Sign Out
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

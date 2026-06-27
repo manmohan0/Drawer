@@ -101,7 +101,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
   const [tempShapes, setTempShapes] = useState<Shape[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [color, setColor] = useState("#000000");
+  const [color, setColor] = useState("#ffffff");
   const [textEditState, setTextEditState] = useState<{
     x: number;
     y: number;
@@ -621,36 +621,36 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
           backgroundPosition: `${pan.x}px ${pan.y}px`,
           backgroundSize: `${gridSpacing * zoom}px ${gridSpacing * zoom}px`,
         }}
-        className="bg-[radial-gradient(circle_at_center,#73737330_2px,transparent_1px)] bg-white"
+        className="bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08)_1.5px,transparent_1px)] bg-zinc-950"
       ></canvas>
 
       {/* Mouse coordinates indicator */}
       {mousePos && (
-        <div className="absolute bottom-4 left-4 z-50 bg-white/90 backdrop-blur-md border border-gray-200/60 shadow-xl rounded-xl px-3.5 py-1.5 text-[11px] font-bold text-gray-700 font-mono tracking-wide pointer-events-none select-none flex items-center space-x-2">
-          <span className="text-gray-400">X:</span>
+        <div className="absolute bottom-4 left-4 z-50 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 shadow-xl rounded-xl px-3.5 py-1.5 text-[11px] font-bold text-zinc-300 font-mono tracking-wide pointer-events-none select-none flex items-center space-x-2">
+          <span className="text-zinc-500">X:</span>
           <span>{mousePos.x}</span>
-          <span className="text-gray-300">|</span>
-          <span className="text-gray-400">Y:</span>
+          <span className="text-zinc-700">|</span>
+          <span className="text-zinc-500">Y:</span>
           <span>{mousePos.y}</span>
         </div>
       )}
       {/* Shape details card */}
       {details && (
-        <div className="absolute top-4 left-4 z-50 w-72 bg-white/75 backdrop-blur-md border border-gray-200/50 shadow-2xl rounded-2xl overflow-hidden transition-all duration-300 transform scale-100 hover:shadow-indigo-100/30 animate-in fade-in duration-200">
+        <div className="absolute top-4 left-4 z-50 w-72 bg-zinc-900/75 backdrop-blur-md border border-zinc-800 shadow-2xl rounded-2xl overflow-hidden transition-all duration-300 transform scale-100 hover:shadow-orange-500/10 animate-in fade-in duration-200">
           {/* Header */}
-          <div className={`flex items-center justify-between px-4 py-3 bg-gray-50/50 select-none ${!isShapeDetailsCollapsed ? "border-b border-gray-100" : ""}`}>
+          <div className={`flex items-center justify-between px-4 py-3 bg-zinc-950/50 select-none ${!isShapeDetailsCollapsed ? "border-b border-zinc-800" : ""}`}>
             <div className="flex items-center space-x-2">
               {details.icon}
-              <span className="font-semibold text-gray-800 tracking-wide text-sm">{details.title}</span>
+              <span className="font-semibold text-zinc-200 tracking-wide text-sm">{details.title}</span>
             </div>
             <div className="flex items-center space-x-2">
-              <span className="text-[10px] text-gray-400 font-mono flex items-center bg-gray-100 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] text-zinc-500 font-mono flex items-center bg-zinc-950 px-1.5 py-0.5 rounded">
                 <Hash className="w-2.5 h-2.5 mr-0.5" />
                 {shapeId !== undefined ? shapeId : "Local"}
               </span>
               <button
                 onClick={() => setIsShapeDetailsCollapsed(!isShapeDetailsCollapsed)}
-                className="p-1 text-gray-400 hover:text-indigo-500 rounded-lg transition-colors cursor-pointer"
+                className="p-1 text-zinc-500 hover:text-orange-500 rounded-lg transition-colors cursor-pointer"
                 title={isShapeDetailsCollapsed ? "Expand Details" : "Collapse Details"}
               >
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isShapeDetailsCollapsed ? "" : "rotate-180"}`} />
@@ -666,12 +666,12 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                 {details.metrics.map((metric, idx) => (
                   <div
                     key={idx}
-                    className={`flex flex-col p-2 rounded-xl bg-gray-50/70 border border-gray-100 transition-all duration-200 hover:bg-white hover:border-indigo-100 hover:shadow-sm ${metric.label === "Area" || metric.label === "Length" || metric.label === "Circumference" || metric.label === "URL Status" || metric.key === "text"
+                    className={`flex flex-col p-2 rounded-xl bg-zinc-950/40 border border-zinc-850 transition-all duration-200 hover:bg-zinc-950 hover:border-orange-500/30 hover:shadow-sm ${metric.label === "Area" || metric.label === "Length" || metric.label === "Circumference" || metric.label === "URL Status" || metric.key === "text"
                       ? "col-span-2"
                       : ""
                       }`}
                   >
-                    <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider">
+                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
                       {metric.label}
                     </span>
                     {metric.editable && metric.key ? (
@@ -681,14 +681,14 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                           value={metric.value}
                           onChange={(e) => handleMetricChange(metric.key!, e.target.value)}
                           disabled={myRole === "Viewer"}
-                          className="text-xs font-semibold text-gray-700 bg-transparent border-b border-dashed border-gray-300 hover:border-indigo-400 focus:border-indigo-500 focus:outline-none w-full py-0.5 disabled:opacity-75 disabled:cursor-not-allowed"
+                          className="text-xs font-semibold text-zinc-200 bg-transparent border-b border-dashed border-zinc-800 hover:border-orange-400 focus:border-orange-500 focus:outline-none w-full py-0.5 disabled:opacity-75 disabled:cursor-not-allowed"
                         />
                         {metric.key !== "text" && (
-                          <span className="text-[10px] text-gray-400">px</span>
+                          <span className="text-[10px] text-zinc-500">px</span>
                         )}
                       </div>
                     ) : (
-                      <span className="text-xs font-semibold text-gray-700 mt-0.5">
+                      <span className="text-xs font-semibold text-zinc-200 mt-0.5">
                         {metric.value}
                       </span>
                     )}
@@ -698,17 +698,17 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
 
               {/* Colors Section */}
               {selectedShape && (selectedShape.type === "rectangle" || selectedShape.type === "circle" || selectedShape.type === "line" || selectedShape.type === "text") && (
-                <div className="pt-3 border-t border-gray-100 space-y-3">
-                  <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block">
+                <div className="pt-3 border-t border-zinc-850 space-y-3">
+                  <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider block">
                     Colors
                   </span>
 
                   {/* Border/Text Color */}
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-gray-600 font-medium">
+                    <span className="text-xs text-zinc-300 font-medium">
                       {selectedShape.type === "text" ? "Text Color" : "Border Color"}
                     </span>
-                    <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors shadow-sm ${myRole === "Viewer" ? "cursor-not-allowed opacity-50" : "cursor-pointer group"}`}>
+                    <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border border-zinc-800 bg-zinc-950 hover:bg-zinc-900 transition-colors shadow-sm ${myRole === "Viewer" ? "cursor-not-allowed opacity-50" : "cursor-pointer group"}`}>
                       <input
                         type="color"
                         value={selectedShape.color || "#000000"}
@@ -717,7 +717,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                         className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10 disabled:cursor-not-allowed"
                       />
                       <div
-                        className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
+                        className="w-5 h-5 rounded-full border border-zinc-800 shadow-inner transition-transform duration-200 group-hover:scale-110"
                         style={{ backgroundColor: selectedShape.color || "#000000" }}
                       />
                     </div>
@@ -726,20 +726,20 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                   {/* Fill Color (only for rect and circle) */}
                   {(selectedShape.type === "rectangle" || selectedShape.type === "circle") && (
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-600 font-medium">Fill Color</span>
+                      <span className="text-xs text-zinc-300 font-medium">Fill Color</span>
                       <div className="flex items-center space-x-2">
                         {/* Transparent toggler */}
                         <button
                           onClick={() => handleColorChange("bg_color", "")}
                           disabled={myRole === "Viewer"}
                           className={`px-2 py-1 text-[10px] font-semibold border rounded-lg transition-all ${!selectedShape.bg_color
-                            ? "bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm"
-                            : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                            ? "bg-orange-500/10 border-orange-500/20 text-orange-400 shadow-sm"
+                            : "bg-zinc-950 border-zinc-800 text-zinc-400 hover:bg-zinc-900"
                             } disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                           Transparent
                         </button>
-                        <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition-colors shadow-sm ${myRole === "Viewer" ? "cursor-not-allowed opacity-50" : "cursor-pointer group"}`}>
+                        <div className={`relative flex items-center justify-center w-8 h-8 rounded-full border border-zinc-800 bg-zinc-950 hover:bg-zinc-900 transition-colors shadow-sm ${myRole === "Viewer" ? "cursor-not-allowed opacity-50" : "cursor-pointer group"}`}>
                           <input
                             type="color"
                             value={selectedShape.bg_color || "#ffffff"}
@@ -748,7 +748,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10 disabled:cursor-not-allowed"
                           />
                           <div
-                            className="w-5 h-5 rounded-full border border-white shadow-inner transition-transform duration-200 group-hover:scale-110"
+                            className="w-5 h-5 rounded-full border border-zinc-800 shadow-inner transition-transform duration-200 group-hover:scale-110"
                             style={{ backgroundColor: selectedShape.bg_color || "#ffffff" }}
                           />
                         </div>
@@ -759,27 +759,27 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               )}
 
               {/* Creator & Updater info */}
-              <div className="pt-3 border-t border-gray-100 flex flex-col gap-2 text-xs">
+              <div className="pt-3 border-t border-zinc-850 flex flex-col gap-2 text-xs">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center text-gray-500 space-x-1.5">
-                    <User className="w-3.5 h-3.5 text-gray-400" />
+                  <div className="flex items-center text-zinc-500 space-x-1.5">
+                    <User className="w-3.5 h-3.5 text-zinc-500" />
                     <span>Created by:</span>
                   </div>
                   <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${creatorName === "You"
-                    ? "bg-indigo-50 text-indigo-600 border border-indigo-100"
-                    : "bg-gray-100 text-gray-600"
+                    ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                    : "bg-zinc-950 text-zinc-450"
                     }`}>
                     {creatorName || "Unknown"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center text-gray-500 space-x-1.5">
-                    <User className="w-3.5 h-3.5 text-gray-400" />
+                  <div className="flex items-center text-zinc-500 space-x-1.5">
+                    <User className="w-3.5 h-3.5 text-zinc-500" />
                     <span>Updated by:</span>
                   </div>
                   <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${updaterName === "You"
-                    ? "bg-indigo-50 text-indigo-600 border border-indigo-100"
-                    : "bg-gray-100 text-gray-600"
+                    ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
+                    : "bg-zinc-950 text-zinc-450"
                     }`}>
                     {updaterName || creatorName || "Unknown"}
                   </span>
@@ -792,14 +792,14 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <button
                       onClick={() => game?.bringForward()}
-                      className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
+                      className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-zinc-850 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-750 text-zinc-200 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm cursor-pointer"
                     >
                       <ArrowUp className="w-3.5 h-3.5" />
                       <span>Bring Forward</span>
                     </button>
                     <button
                       onClick={() => game?.sendBackward()}
-                      className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-200 text-indigo-600 hover:text-indigo-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
+                      className="flex items-center justify-center space-x-1.5 px-3 py-2 bg-zinc-850 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-750 text-zinc-200 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm cursor-pointer"
                     >
                       <ArrowDown className="w-3.5 h-3.5" />
                       <span>Send Backward</span>
@@ -809,7 +809,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                   {/* Actions */}
                   <button
                     onClick={() => game?.deleteSelectedShape()}
-                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-100 hover:border-red-200 text-red-600 hover:text-red-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm"
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/25 hover:border-red-500/35 text-red-400 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Delete Shape</span>
@@ -822,27 +822,27 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       )}
 
       {myRole === "Viewer" ? (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white/90 backdrop-blur-md border border-gray-200/50 shadow-lg rounded-2xl px-5 py-2.5 flex items-center space-x-2 text-xs font-bold text-gray-500 select-none tracking-wide">
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 shadow-lg rounded-2xl px-5 py-2.5 flex items-center space-x-2 text-xs font-bold text-zinc-400 select-none tracking-wide">
           <Eye className="w-4 h-4 text-orange-500" />
           <span>VIEWER MODE (READ-ONLY)</span>
         </div>
       ) : (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 border shadow-md rounded-2xl flex space-x-2 p-2 justify-center bg-gray-200 items-center">
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 shadow-xl rounded-2xl flex space-x-2 p-2 justify-center items-center">
           {types.map((type) => (
             <div
               key={type.name}
               onClick={() => onTypeChange(type.name as ShapeType)}
-              className={`cursor-pointer px-2 py-1 ${tool === type.name ? "text-orange-500" : "text-gray-400"} hover:bg-gray-100 rounded`}
+              className={`cursor-pointer px-2 py-1 ${tool === type.name ? "text-orange-500" : "text-zinc-500"} hover:bg-zinc-800 rounded`}
             >
               {type.logo}
             </div>
           ))}
 
           {/* Divider */}
-          <div className="h-6 w-px bg-gray-300 self-center"></div>
+          <div className="h-6 w-px bg-zinc-800 self-center"></div>
 
           {/* Color picker */}
-          <div className="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-100 transition-colors cursor-pointer group">
+          <div className="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-zinc-800 transition-colors cursor-pointer group">
             <input
               type="color"
               value={color}
@@ -850,7 +850,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
             />
             <div
-              className="w-5 h-5 rounded-full border border-white shadow-sm transition-transform duration-200 group-hover:scale-110"
+              className="w-5 h-5 rounded-full border border-zinc-800 shadow-sm transition-transform duration-200 group-hover:scale-110"
               style={{ backgroundColor: color }}
             />
           </div>
@@ -861,8 +861,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
             disabled={!canUndo}
             title="Undo (Ctrl+Z)"
             className={`p-1.5 rounded transition-colors ${canUndo
-                ? "text-gray-600 hover:bg-gray-100 cursor-pointer"
-                : "text-gray-300 cursor-not-allowed"
+                ? "text-zinc-300 hover:bg-zinc-800 cursor-pointer"
+                : "text-zinc-700 cursor-not-allowed"
               }`}
           >
             <Undo className="w-4 h-4" />
@@ -874,19 +874,19 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
             disabled={!canRedo}
             title="Redo (Ctrl+Y)"
             className={`p-1.5 rounded transition-colors ${canRedo
-                ? "text-gray-600 hover:bg-gray-100 cursor-pointer"
-                : "text-gray-300 cursor-not-allowed"
+                ? "text-zinc-300 hover:bg-zinc-800 cursor-pointer"
+                : "text-zinc-700 cursor-not-allowed"
               }`}
           >
             <Redo className="w-4 h-4" />
           </button>
 
           {/* Divider */}
-          <div className="h-6 w-px bg-gray-300 self-center"></div>
+          <div className="h-6 w-px bg-zinc-800 self-center"></div>
 
           <div
             onClick={clearCanvas}
-            className="cursor-pointer px-2 py-1 text-gray-400 hover:bg-gray-100 rounded"
+            className="cursor-pointer px-2 py-1 text-zinc-400 hover:bg-zinc-800 rounded"
           >
             Clear
           </div>
@@ -898,45 +898,45 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
         {!isReplayMode && (
           <button
             onClick={startReplayMode}
-            className="flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-200/50 text-white font-semibold shadow-lg hover:shadow-xl rounded-full px-4 py-2 transition-all duration-200 cursor-pointer active:scale-95 text-xs select-none border border-indigo-500/10"
+            className="flex items-center space-x-1.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 hover:shadow-orange-500/20 text-white font-semibold shadow-lg hover:shadow-xl rounded-full px-4 py-2 transition-all duration-200 cursor-pointer active:scale-95 text-xs select-none border border-orange-500/10"
           >
-            <Sparkles className="w-3.5 h-3.5 animate-pulse text-indigo-200" />
+            <Sparkles className="w-3.5 h-3.5 animate-pulse text-orange-200" />
             <span>Replay Time-Lapse</span>
           </button>
         )}
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          className="flex items-center space-x-2 bg-white/80 backdrop-blur-md border border-gray-200/50 hover:bg-white hover:border-gray-300 shadow-lg hover:shadow-xl rounded-full p-1.5 pr-3 transition-all duration-200 cursor-pointer active:scale-95 group"
+          className="flex items-center space-x-2 bg-zinc-900/80 backdrop-blur-md border border-zinc-800 hover:bg-zinc-900 hover:border-zinc-700 shadow-lg hover:shadow-xl rounded-full p-1.5 pr-3 transition-all duration-200 cursor-pointer active:scale-95 group"
         >
           <div className="w-8 h-8 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 flex items-center justify-center text-white shadow-inner">
             <User className="w-4 h-4" />
           </div>
-          <span className="text-xs font-semibold text-gray-700 select-none">{myUserName}</span>
-          <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
+          <span className="text-xs font-semibold text-zinc-200 select-none">{myUserName}</span>
+          <ChevronDown className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
         </button>
 
         {isDropdownOpen && (
-          <div className="absolute right-0 mt-2 w-72 bg-white/95 backdrop-blur-md border border-gray-200/50 shadow-2xl rounded-2xl overflow-hidden transition-all duration-200 animate-in fade-in slide-in-from-top-2 origin-top-right">
+          <div className="absolute right-0 mt-2 w-72 bg-zinc-900/95 backdrop-blur-md border border-zinc-800 shadow-2xl rounded-2xl overflow-hidden transition-all duration-200 animate-in fade-in slide-in-from-top-2 origin-top-right">
             {/* Header */}
-            <div className="px-4 py-3 bg-gray-50/50 border-b border-gray-100">
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Drawer Session</span>
+            <div className="px-4 py-3 bg-zinc-950/50 border-b border-zinc-800">
+              <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">Drawer Session</span>
             </div>
 
             {/* Current Room Details */}
             {currentRoom && (
-              <div className="px-4 py-3 border-b border-gray-100 bg-orange-50/20 space-y-2">
-                <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wider block">
+              <div className="px-4 py-3 border-b border-zinc-800 bg-orange-500/5 space-y-2">
+                <span className="text-[10px] font-bold text-orange-400 uppercase tracking-wider block">
                   Current Room Details
                 </span>
-                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                  <div className="flex flex-col bg-white p-3.5 rounded-xl border border-orange-100/50 shadow-sm col-span-2">
-                    <span className="text-[9px] uppercase font-bold text-gray-400">Room Code</span>
-                    <span className="font-mono font-bold text-gray-800 text-sm mt-0.5">{currentRoom.slug}</span>
+                <div className="grid grid-cols-2 gap-2 text-xs text-zinc-400">
+                  <div className="flex flex-col bg-zinc-950 p-3.5 rounded-xl border border-zinc-850/50 shadow-sm col-span-2">
+                    <span className="text-[9px] uppercase font-bold text-zinc-500">Room Code</span>
+                    <span className="font-mono font-bold text-zinc-200 text-sm mt-0.5">{currentRoom.slug}</span>
                   </div>
-                  <div className="flex flex-col bg-white p-3.5 rounded-xl border border-orange-100/50 shadow-sm">
-                    <span className="text-[9px] uppercase font-bold text-gray-400">Admin</span>
+                  <div className="flex flex-col bg-zinc-950 p-3.5 rounded-xl border border-zinc-850/50 shadow-sm">
+                    <span className="text-[9px] uppercase font-bold text-zinc-500">Admin</span>
                     <span
-                      className="font-medium text-gray-800 mt-0.5 truncate text-xs"
+                      className="font-medium text-zinc-200 mt-0.5 truncate text-xs"
                       title={
                         Array.isArray(currentRoom.admin)
                           ? currentRoom.admin.map((a: any) => `${a.firstName} ${a.lastName}`).join(", ")
@@ -951,9 +951,9 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                       }
                     </span>
                   </div>
-                  <div className="flex flex-col bg-white p-3.5 rounded-xl border border-orange-100/50 shadow-sm">
-                    <span className="text-[9px] uppercase font-bold text-gray-400">Created On</span>
-                    <span className="font-medium text-gray-800 mt-0.5">
+                  <div className="flex flex-col bg-zinc-950 p-3.5 rounded-xl border border-zinc-850/50 shadow-sm">
+                    <span className="text-[9px] uppercase font-bold text-zinc-500">Created On</span>
+                    <span className="font-medium text-zinc-200 mt-0.5">
                       {new Date(currentRoom.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
                   </div>
@@ -964,7 +964,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                     router.push(`/room-details/${currentRoom.slug}`);
                     setIsDropdownOpen(false);
                   }}
-                  className="w-full flex items-center justify-center space-x-1.5 px-3 py-1.5 bg-orange-100/50 hover:bg-orange-100 text-orange-700 hover:text-orange-800 font-bold rounded-xl text-[10px] transition-all duration-200 active:scale-95 shadow-inner mt-2 cursor-pointer"
+                  className="w-full flex items-center justify-center space-x-1.5 px-3 py-1.5 bg-zinc-850 hover:bg-zinc-800 text-orange-400 hover:text-orange-300 border border-zinc-800 font-bold rounded-xl text-[10px] transition-all duration-200 active:scale-95 shadow-inner mt-2 cursor-pointer"
                 >
                   <span>View Members & Roles</span>
                 </button>
@@ -988,18 +988,18 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
 
               {/* Rooms List */}
               <div className="space-y-2">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center">
-                  <Folder className="w-3.5 h-3.5 mr-1 text-gray-400" />
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider flex items-center">
+                  <Folder className="w-3.5 h-3.5 mr-1 text-zinc-500" />
                   My Rooms
                 </span>
 
                 {roomsLoading ? (
-                  <div className="flex items-center justify-center py-6 text-gray-400 space-x-2">
+                  <div className="flex items-center justify-center py-6 text-zinc-500 space-x-2">
                     <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
                     <span className="text-xs">Loading rooms...</span>
                   </div>
                 ) : myRooms.length === 0 ? (
-                  <div className="text-center py-4 text-xs text-gray-400 bg-gray-50/50 rounded-xl border border-dashed border-gray-200">
+                  <div className="text-center py-4 text-xs text-zinc-500 bg-zinc-950/50 rounded-xl border border-dashed border-zinc-850">
                     No rooms joined yet.
                   </div>
                 ) : (
@@ -1017,13 +1017,13 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                             setIsDropdownOpen(false);
                           }}
                           className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border text-left transition-all cursor-pointer ${isCurrent
-                            ? "bg-orange-50 border-orange-200 text-orange-700 font-semibold"
-                            : "bg-white hover:bg-gray-50 border-gray-100 hover:border-gray-200 text-gray-600 hover:text-gray-900"
+                            ? "bg-orange-500/10 border-orange-500/25 text-orange-400 font-semibold"
+                            : "bg-zinc-950 hover:bg-zinc-900 border-zinc-850 hover:border-zinc-800 text-zinc-400 hover:text-zinc-200"
                             }`}
                         >
                           <span className="text-xs font-mono">Room Code: {room.slug}</span>
                           {isCurrent && (
-                            <span className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold uppercase">
+                            <span className="text-[9px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded-full font-bold uppercase">
                               Active
                             </span>
                           )}
@@ -1035,11 +1035,11 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               </div>
 
               {/* Actions */}
-              <div className="pt-3 border-t border-gray-100">
+              <div className="pt-3 border-t border-zinc-800">
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-red-50 hover:bg-red-100 border border-red-100 hover:border-red-200 text-red-600 hover:text-red-700 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm cursor-pointer"
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 font-semibold rounded-xl text-xs transition-all duration-200 active:scale-95 shadow-sm cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Sign Out</span>
@@ -1052,15 +1052,15 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
 
       {/* Room Members Panel */}
       {Object.keys(activeUsers).length > 0 && (
-        <div className={`absolute top-20 right-4 z-50 w-64 bg-white/80 backdrop-blur-md border border-gray-200/50 shadow-lg rounded-2xl p-4 flex flex-col transition-all duration-300 overflow-hidden hover:shadow-indigo-100/30 ${isMembersListCollapsed ? "max-h-[52px]" : "max-h-[300px]"}`}>
-          <div className={`flex items-center justify-between ${!isMembersListCollapsed ? "pb-2 border-b border-gray-100" : ""}`}>
+        <div className={`absolute top-20 right-4 z-50 w-64 bg-zinc-900/80 backdrop-blur-md border border-zinc-800 shadow-lg rounded-2xl p-4 flex flex-col transition-all duration-300 overflow-hidden hover:shadow-orange-500/5 ${isMembersListCollapsed ? "max-h-[52px]" : "max-h-[300px]"}`}>
+          <div className={`flex items-center justify-between ${!isMembersListCollapsed ? "pb-2 border-b border-zinc-800" : ""}`}>
             <div className="flex items-center space-x-2">
               <User className="w-4 h-4 text-orange-500" />
-              <span className="text-xs font-bold text-gray-700 tracking-wide">Room Members</span>
+              <span className="text-xs font-bold text-zinc-200 tracking-wide">Room Members</span>
             </div>
             <button
               onClick={() => setIsMembersListCollapsed(!isMembersListCollapsed)}
-              className="p-1 text-gray-400 hover:text-orange-500 rounded-lg transition-colors cursor-pointer"
+              className="p-1 text-zinc-500 hover:text-orange-400 rounded-lg transition-colors cursor-pointer"
               title={isMembersListCollapsed ? "Expand Members" : "Collapse Members"}
             >
               <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isMembersListCollapsed ? "" : "rotate-180"}`} />
@@ -1072,12 +1072,12 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                 const name = `${u.firstName} ${u.lastName}`.trim();
                 const isMe = uId === myUserId;
                 return (
-                  <div key={uId} className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-50/80 transition-colors">
+                  <div key={uId} className="flex items-center justify-between p-2 rounded-xl hover:bg-zinc-950/80 transition-colors">
                     <div className="flex items-center space-x-2">
-                      <div className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-[10px] font-bold select-none">
+                      <div className="w-6 h-6 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20 flex items-center justify-center text-[10px] font-bold select-none">
                         {u.firstName[0] || ""}{u.lastName[0] || ""}
                       </div>
-                      <span className="text-xs text-gray-700 font-medium truncate max-w-[130px]" title={name}>
+                      <span className="text-xs text-zinc-200 font-medium truncate max-w-[130px]" title={name}>
                         {name} {isMe && "(You)"}
                       </span>
                     </div>
@@ -1091,7 +1091,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                               userId: uId
                             }));
                           }}
-                          className="p-1 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer"
+                          className="p-1 text-zinc-500 hover:text-orange-400 hover:bg-orange-500/10 rounded-lg transition-colors cursor-pointer"
                           title="Locate member on canvas"
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -1099,7 +1099,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                         {myRole === "Owner" && (
                           <button
                             onClick={() => handleRemoveUser(uId)}
-                            className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            className="p-1 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
                             title="Remove user from room"
                           >
                             <UserMinus className="w-3.5 h-3.5" />
@@ -1118,11 +1118,11 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       {/* AI Preview Controls & Error Messages */}
       <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-lg px-4 sm:px-0 flex flex-col items-center space-y-2 pointer-events-none">
         {error && (
-          <div className="w-full flex items-center justify-between bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-2xl shadow-xl pointer-events-auto animate-in fade-in duration-200">
+          <div className="w-full flex items-center justify-between bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-2.5 rounded-2xl shadow-xl pointer-events-auto animate-in fade-in duration-200">
             <span className="text-xs font-semibold">{error}</span>
             <button
               onClick={() => setError(null)}
-              className="text-red-400 hover:text-red-600 transition-colors p-1"
+              className="text-red-550 hover:text-red-400 transition-colors p-1"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -1130,20 +1130,20 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
         )}
 
         {tempShapes.length > 0 && (
-          <div className="flex items-center space-x-3 bg-white/95 backdrop-blur-md border border-indigo-100 shadow-2xl rounded-2xl px-4 py-3 pointer-events-auto animate-in fade-in duration-200">
-            <span className="text-xs font-semibold text-gray-700">
+          <div className="flex items-center space-x-3 bg-zinc-900/95 backdrop-blur-md border border-zinc-800 shadow-2xl rounded-2xl px-4 py-3 pointer-events-auto animate-in fade-in duration-200">
+            <span className="text-xs font-semibold text-zinc-200">
               AI generated {tempShapes.length} shapes
             </span>
             <button
               onClick={handleAcceptShapes}
-              className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer shadow-sm"
+              className="flex items-center space-x-1 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer shadow-sm"
             >
               <Check className="w-3.5 h-3.5" />
               <span>Accept</span>
             </button>
             <button
               onClick={handleRejectShapes}
-              className="flex items-center space-x-1 px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 hover:border-red-200 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer"
+              className="flex items-center space-x-1 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/30 rounded-xl text-xs font-bold transition-all duration-200 active:scale-95 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
               <span>Reject</span>
@@ -1157,7 +1157,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
         <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-lg px-4 sm:px-0">
           <form
             onSubmit={handlePromptSubmit}
-            className="flex items-center space-x-2 bg-white/90 backdrop-blur-md border border-gray-200/50 shadow-2xl rounded-2xl p-1.5 transition-all duration-300 hover:shadow-indigo-100/40 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100"
+            className="flex items-center space-x-2 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 shadow-2xl rounded-2xl p-1.5 transition-all duration-300 hover:shadow-orange-500/10 focus-within:border-orange-500/50 focus-within:ring-2 focus-within:ring-orange-500/10"
           >
             <input
               type="text"
@@ -1165,12 +1165,12 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               onChange={(e) => setPrompt(e.target.value)}
               disabled={loading}
               placeholder={loading ? "AI is thinking and drawing..." : "Ask AI to draw something... (e.g. 'draw a red circle')"}
-              className="flex-1 bg-transparent border-none outline-none pl-3 text-sm text-gray-800 placeholder-gray-400 py-2 w-full focus:ring-0 disabled:text-gray-400"
+              className="flex-1 bg-transparent border-none outline-none pl-3 text-sm text-zinc-200 placeholder-zinc-500 py-2 w-full focus:ring-0 disabled:text-gray-400"
             />
             <button
               type="submit"
               disabled={!prompt.trim() || loading}
-              className="flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-100 text-white disabled:text-gray-400 p-2.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer shadow-md disabled:shadow-none"
+              className="flex items-center justify-center bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:bg-zinc-800 text-white disabled:text-zinc-600 p-2.5 rounded-xl transition-all duration-200 active:scale-95 cursor-pointer shadow-md disabled:shadow-none"
             >
               {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -1235,25 +1235,25 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
       {/* Replay Control Bar */}
       {isReplayMode && (
         <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-xl px-4 sm:px-0">
-          <div className="bg-white/85 backdrop-blur-xl border border-indigo-100/80 shadow-[0_20px_50px_rgba(79,70,229,0.15)] rounded-3xl p-5 flex flex-col space-y-4 transition-all duration-300">
+          <div className="bg-zinc-900/85 backdrop-blur-xl border border-zinc-800 shadow-[0_20px_50px_rgba(249,115,22,0.08)] rounded-3xl p-5 flex flex-col space-y-4 transition-all duration-300">
             {/* Header info */}
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">
+                <span className="text-[10px] font-bold text-orange-400 uppercase tracking-widest">
                   Event Replay Mode
                 </span>
-                <span className="text-xs font-semibold text-gray-700 mt-0.5">
+                <span className="text-xs font-semibold text-zinc-200 mt-0.5">
                   Step {replayCurrentIndex + 1} of {replayEvents.length}
                 </span>
               </div>
-              <div className="text-xs font-medium text-gray-500 max-w-[280px] truncate bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5" title={replayEvents[replayCurrentIndex]?.description}>
+              <div className="text-xs font-medium text-zinc-400 max-w-[280px] truncate bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5" title={replayEvents[replayCurrentIndex]?.description}>
                 {replayEvents[replayCurrentIndex]?.description || "Empty room - no events recorded"}
               </div>
             </div>
 
             {/* Scrubber slider */}
             <div className="flex items-center space-x-3 group">
-              <span className="text-[10px] font-bold text-gray-400 select-none w-8 text-center font-mono">START</span>
+              <span className="text-[10px] font-bold text-zinc-500 select-none w-8 text-center font-mono">START</span>
               <input
                 type="range"
                 min={-1}
@@ -1265,9 +1265,9 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                   const shapes = computeReplayShapes(replayEvents, val);
                   game?.setReplayShapes(shapes);
                 }}
-                className="w-full h-1.5 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-indigo-600 outline-none transition-all focus:ring-2 focus:ring-indigo-100"
+                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-orange-500 outline-none transition-all focus:ring-2 focus:ring-orange-500/10"
               />
-              <span className="text-[10px] font-bold text-gray-400 select-none w-8 text-center font-mono">END</span>
+              <span className="text-[10px] font-bold text-zinc-500 select-none w-8 text-center font-mono">END</span>
             </div>
 
             {/* Controls */}
@@ -1286,7 +1286,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                     });
                   }}
                   disabled={replayCurrentIndex <= -1}
-                  className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-100/80 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all cursor-pointer border border-transparent hover:border-gray-200"
+                  className="p-2 text-zinc-550 hover:text-orange-400 hover:bg-zinc-800 hover:border-zinc-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all cursor-pointer border border-transparent"
                   title="Previous Step"
                 >
                   <SkipBack className="w-4 h-4" />
@@ -1302,7 +1302,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                     }
                     setReplayIsPlaying(!replayIsPlaying);
                   }}
-                  className="p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl shadow-lg hover:shadow-indigo-500/35 transition-all duration-200 active:scale-95 cursor-pointer flex items-center justify-center"
+                  className="p-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white rounded-2xl shadow-lg hover:shadow-orange-500/35 transition-all duration-200 active:scale-95 cursor-pointer flex items-center justify-center"
                   title={replayIsPlaying ? "Pause Playback" : "Start Playback"}
                 >
                   {replayIsPlaying ? (
@@ -1325,7 +1325,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                     });
                   }}
                   disabled={replayCurrentIndex >= replayEvents.length - 1}
-                  className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-100/80 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all cursor-pointer border border-transparent hover:border-gray-200"
+                  className="p-2 text-zinc-555 hover:text-orange-400 hover:bg-zinc-800 hover:border-zinc-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all cursor-pointer border border-transparent"
                   title="Next Step"
                 >
                   <SkipForward className="w-4 h-4" />
@@ -1333,7 +1333,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               </div>
 
               {/* Speed Controller */}
-              <div className="flex items-center space-x-1.5 bg-gray-100/80 border border-gray-200/30 p-1.5 rounded-2xl text-[10px] font-bold text-gray-500">
+              <div className="flex items-center space-x-1.5 bg-zinc-950 border border-zinc-850 p-1.5 rounded-2xl text-[10px] font-bold text-zinc-500">
                 {[1000, 500, 200, 50].map((speed, idx) => {
                   const label = ["0.5x", "1x", "2.5x", "10x"][idx];
                   return (
@@ -1341,8 +1341,8 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
                       key={speed}
                       onClick={() => setReplaySpeed(speed)}
                       className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer select-none ${replaySpeed === speed
-                        ? "bg-white text-indigo-600 shadow-sm border border-gray-200/10 font-extrabold"
-                        : "hover:bg-white/40 hover:text-gray-700"
+                        ? "bg-zinc-800 text-orange-400 border border-zinc-700 font-extrabold"
+                        : "hover:bg-zinc-900 hover:text-zinc-300"
                         }`}
                     >
                       {label}
@@ -1354,7 +1354,7 @@ export const Canvas = ({ roomId, ws }: { roomId: string; ws: WebSocket }) => {
               {/* Stop / Exit */}
               <button
                 onClick={stopReplayMode}
-                className="px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-100 hover:border-red-200 text-red-600 hover:text-red-700 font-semibold rounded-2xl text-xs transition-all duration-200 active:scale-95 cursor-pointer shadow-sm"
+                className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 font-semibold rounded-2xl text-xs transition-all duration-200 active:scale-95 cursor-pointer shadow-sm"
               >
                 Exit Replay
               </button>

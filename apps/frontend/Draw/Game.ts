@@ -24,7 +24,7 @@ export class Game {
   private existingShapes: Shape[];
   private tempShapes: Shape[] = [];
   private replayShapes: Shape[] | null = null;
-  private selectedColor: string = "#000000";
+  private selectedColor: string = "#ffffff";
   // Track whether the primary mouse button is currently held down
   private isClicked: boolean;
   // X-coordinate of the mouse cursor when a drag or draw interaction starts
@@ -184,6 +184,11 @@ export class Game {
       this.onViewportChangeCallbacks.forEach((cb) => cb());
     }
   }
+
+  private getEffectiveColor = (color: string | undefined): string => {
+    if (!color || color === "#000000") return "#ffffff";
+    return color;
+  };
 
   // Helper methods returning if history is available
   public canUndo(): boolean {
@@ -913,6 +918,7 @@ export class Game {
 
       // Redraw canvas to render the updated shape preview coordinates
       this.clearCanvas();
+      this.ctx.strokeStyle = this.getEffectiveColor(this.selectedColor);
 
       if (this.selectedTool === "rectangle") {
         this.ctx.strokeRect(this.startX, this.startY, width, height);
@@ -1394,6 +1400,7 @@ export class Game {
         endY: currentY,
         type: this.selectedTool,
         zIndex,
+        color: this.selectedColor,
       };
     } else if (this.selectedTool === "rectangle") {
       shape = {
@@ -1404,6 +1411,7 @@ export class Game {
         height: Math.abs(height),
         bg_color: "",
         zIndex,
+        color: this.selectedColor,
       };
     } else if (this.selectedTool === "circle") {
       shape = {
@@ -1412,6 +1420,7 @@ export class Game {
         centerY: this.startY,
         radius: Math.sqrt(width * width + height * height),
         zIndex,
+        color: this.selectedColor,
       };
     } else if (this.selectedTool === "image") {
       const aspectRatio = this.getImageAspectRatio("/add-image.png");
@@ -2382,7 +2391,7 @@ export class Game {
           this.ctx.rotate(shape.angle ? shape.angle * (Math.PI / 180) : 0);
           this.ctx.translate(-shape.startX - shape.width / 2, -shape.startY - shape.height / 2);
           if (shape.color) {
-            this.ctx.strokeStyle = shape.color;
+            this.ctx.strokeStyle = this.getEffectiveColor(shape.color);
           }
           if (shape.bg_color) {
             this.ctx.fillStyle = shape.bg_color;
@@ -2391,7 +2400,7 @@ export class Game {
           this.ctx.strokeRect(shape.startX, shape.startY, shape.width, shape.height);
         } else if (shape.type === "line") {
           if (shape.color) {
-            this.ctx.strokeStyle = shape.color;
+            this.ctx.strokeStyle = this.getEffectiveColor(shape.color);
           }
           this.ctx.beginPath();
           this.ctx.moveTo(shape.startX, shape.startY);
@@ -2399,7 +2408,7 @@ export class Game {
           this.ctx.stroke();
         } else if (shape.type === "circle") {
           if (shape.color) {
-            this.ctx.strokeStyle = shape.color;
+            this.ctx.strokeStyle = this.getEffectiveColor(shape.color);
           }
           this.ctx.beginPath();
           this.ctx.arc(shape.centerX, shape.centerY, shape.radius, 0, 2 * Math.PI);
@@ -2422,7 +2431,7 @@ export class Game {
         } else if (shape.type === "text") {
           this.ctx.textBaseline = "top";
           this.ctx.font = `${shape.fontSize || 20}px sans-serif`;
-          this.ctx.fillStyle = shape.color || "#000000";
+          this.ctx.fillStyle = this.getEffectiveColor(shape.color);
           this.ctx.fillText(shape.text, shape.startX, shape.startY);
         }
         this.ctx.restore();
@@ -2445,7 +2454,7 @@ export class Game {
           this.ctx.translate(centerX, centerY);
           this.ctx.rotate((shape.angle || 0) * Math.PI / 180);
           if (shape.color) {
-            this.ctx.strokeStyle = shape.color;
+            this.ctx.strokeStyle = this.getEffectiveColor(shape.color);
           }
           if (shape.bg_color) {
             this.ctx.fillStyle = shape.bg_color;
@@ -2456,7 +2465,7 @@ export class Game {
           this.ctx.translate(centerX, centerY);
           this.ctx.rotate((shape.angle || 0) * Math.PI / 180);
           if (shape.color) {
-            this.ctx.strokeStyle = shape.color;
+            this.ctx.strokeStyle = this.getEffectiveColor(shape.color);
           }
           this.ctx.beginPath();
           this.ctx.moveTo(shape.startX - centerX, shape.startY - centerY);
@@ -2464,7 +2473,7 @@ export class Game {
           this.ctx.stroke();
         } else if (shape.type === "circle") {
           if (shape.color) {
-            this.ctx.strokeStyle = shape.color;
+            this.ctx.strokeStyle = this.getEffectiveColor(shape.color);
           }
           this.ctx.beginPath();
           this.ctx.arc(
@@ -2506,7 +2515,7 @@ export class Game {
         } else if (shape.type === "text") {
           this.ctx.textBaseline = "top";
           this.ctx.font = `${shape.fontSize || 20}px sans-serif`;
-          this.ctx.fillStyle = shape.color || "#000000";
+          this.ctx.fillStyle = this.getEffectiveColor(shape.color);
           this.ctx.fillText(shape.text, shape.startX, shape.startY);
         }
         this.ctx.restore();
@@ -2545,7 +2554,7 @@ export class Game {
         this.ctx.beginPath();
         this.ctx.moveTo(baseWorldX, baseWorldY);
         this.ctx.lineTo(logoWorldX, logoWorldY);
-        this.ctx.strokeStyle = "#4f46e5"; // Indigo connector line
+        this.ctx.strokeStyle = "#f97316"; // Orange connector line
         this.ctx.lineWidth = 1.5;
         this.ctx.setLineDash([5, 3]); // Dashed line
         this.ctx.stroke();
@@ -2566,7 +2575,7 @@ export class Game {
           );
           this.ctx.fillStyle = "#ffffff";
           this.ctx.fill();
-          this.ctx.strokeStyle = "#4f46e5"; // Indigo border
+          this.ctx.strokeStyle = "#f97316"; // Orange border
           this.ctx.lineWidth = 1.5;
           this.ctx.stroke();
         });
