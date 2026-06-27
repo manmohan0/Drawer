@@ -64,6 +64,10 @@ export class Game {
   // Stacks to store the history of shapes that can be undone/redone
   private undoStack: HistoryAction[] = [];
   private redoStack: HistoryAction[] = [];
+
+  private clipboardShape: Shape | null = null;
+  private lastMouseWorldX: number = 0;
+  private lastMouseWorldY: number = 0;
   // Map to track asynchronous shape recreations by their temporary transaction IDs
   private pendingHistoryMap: Map<string, HistoryAction> = new Map();
   private isUndoingRedoing: boolean = false;
@@ -835,6 +839,8 @@ export class Game {
   mouseMoveHandler = (e: MouseEvent) => {
     if (this.replayShapes !== null) return;
     const { x: currentX, y: currentY } = this.getMousePos(e);
+    this.lastMouseWorldX = currentX;
+    this.lastMouseWorldY = currentY;
     if (this.onMouseMove) {
       this.onMouseMove(Math.round(currentX), Math.round(currentY));
     }
@@ -1638,6 +1644,78 @@ export class Game {
     if (e.key === 'Delete') {
       if (this.selectedShape) {
         this.deleteSelectedShape();
+        return;
+      }
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+      if (this.selectedShape) {
+        const shape = JSON.parse(JSON.stringify(this.selectedShape));
+        shape.id = undefined;
+        shape.zIndex = this.existingShapes.length;
+        this.ws.send(
+          JSON.stringify({
+            type: "chat",
+            roomId: this.roomId,
+            eventType: EventType.CREATE_SHAPE,
+            shape: JSON.stringify(shape),
+            userId: this.myUserId,
+          })
+        );
+      }
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+      if (this.selectedShape) {
+        this.clipboardShape = JSON.parse(JSON.stringify(this.selectedShape));
+        if (this.clipboardShape) {
+          this.clipboardShape.id = undefined; // Clear ID so it recreates on paste
+        }
+      }
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+      e.preventDefault();
+      if (this.clipboardShape) {
+        let shape = JSON.parse(JSON.stringify(this.clipboardShape));
+        const x = this.lastMouseWorldX;
+        const y = this.lastMouseWorldY;
+
+        if (shape.type === "rectangle" || shape.type === "image") {
+          shape.startX = x - (shape.width || 100) / 2;
+          shape.startY = y - (shape.height || 100) / 2;
+        } else if (shape.type === "circle") {
+          shape.centerX = x;
+          shape.centerY = y;
+        } else if (shape.type === "line") {
+          const originalCenterX = ((shape.startX || 0) + (shape.endX || 0)) / 2;
+          const originalCenterY = ((shape.startY || 0) + (shape.endY || 0)) / 2;
+
+          const dxStart = (shape.startX || 0) - originalCenterX;
+          const dyStart = (shape.startY || 0) - originalCenterY;
+          const dxEnd = (shape.endX || 0) - originalCenterX;
+          const dyEnd = (shape.endY || 0) - originalCenterY;
+
+          shape.startX = x + dxStart;
+          shape.startY = y + dyStart;
+          shape.endX = x + dxEnd;
+          shape.endY = y + dyEnd;
+        } else if (shape.type === "text") {
+          shape.startX = x;
+          shape.startY = y;
+        }
+
+        shape.zIndex = this.existingShapes.length;
+
+        this.ws.send(
+          JSON.stringify({
+            type: "chat",
+            roomId: this.roomId,
+            shape: JSON.stringify(shape),
+            userId: this.myUserId,
+          })
+        );
       }
     }
 
@@ -2042,9 +2120,11 @@ export class Game {
           const tempHistoryId = data.shape.shape?.tempHistoryId;
           if (tempHistoryId && this.pendingHistoryMap.has(tempHistoryId)) {
             const action = this.pendingHistoryMap.get(tempHistoryId)!;
-            action.shapeId = shape.id;
-            action.shape = shape;
-            delete (action.shape as any).tempHistoryId;
+            if (action.type === "create" || action.type === "delete") {
+              action.shapeId = shape.id;
+              action.shape = shape;
+              delete (action.shape as any).tempHistoryId;
+            }
             this.pendingHistoryMap.delete(tempHistoryId);
           } else {
             this.undoStack.push({
