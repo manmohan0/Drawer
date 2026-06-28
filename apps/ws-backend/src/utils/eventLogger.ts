@@ -35,7 +35,8 @@ export async function appendRoomEvent({
             eventType,
             shapeId,
             userId,
-            payload: typeof payload === "string" ? payload : JSON.stringify(payload),
+            payload:
+              typeof payload === "string" ? payload : JSON.stringify(payload),
             description,
           },
         });
@@ -47,7 +48,9 @@ export async function appendRoomEvent({
       if (error.code === "P2002") {
         retries--;
         if (retries === 0) {
-          throw new Error("Failed to append event: too many concurrent edits. Please try again.");
+          throw new Error(
+            "Failed to append event: too many concurrent edits. Please try again.",
+          );
         }
         // Brief backoff before retrying
         await new Promise((resolve) => setTimeout(resolve, 50));

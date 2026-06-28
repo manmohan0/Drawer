@@ -6,7 +6,15 @@ import Link from "next/link";
 import axios from "axios";
 import { BACKEND_URL } from "@/config";
 import { getCookie, deleteCookie } from "@/utils/cookie";
-import { ArrowLeft, Folder, Loader2, LogOut, Plus, Search, User } from "lucide-react";
+import {
+  ArrowLeft,
+  Folder,
+  Loader2,
+  LogOut,
+  Plus,
+  Search,
+  User,
+} from "lucide-react";
 
 export default function RoomsPage() {
   const router = useRouter();
@@ -50,14 +58,16 @@ export default function RoomsPage() {
   };
 
   const filteredRooms = rooms.filter((room) =>
-    String(room.slug).toLowerCase().includes(searchQuery.toLowerCase())
+    String(room.slug).toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   if (loading) {
     return (
       <div className="min-h-screen w-screen flex flex-col items-center justify-center bg-zinc-950 text-white">
         <Loader2 className="w-10 h-10 animate-spin text-orange-500 mb-4" />
-        <p className="text-zinc-400 text-sm animate-pulse">Loading your rooms...</p>
+        <p className="text-zinc-400 text-sm animate-pulse">
+          Loading your rooms...
+        </p>
       </div>
     );
   }
@@ -65,7 +75,6 @@ export default function RoomsPage() {
   return (
     <div className="min-h-screen w-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white p-6 md:p-12 font-sans">
       <div className="max-w-5xl mx-auto space-y-8">
-        
         {/* Top Navigation / Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-zinc-800/80">
           <div className="flex items-center space-x-3">
@@ -78,7 +87,9 @@ export default function RoomsPage() {
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-orange-400 to-amber-500 bg-clip-text text-transparent">
                 My Rooms
               </h1>
-              <p className="text-xs text-zinc-500">Collaborate with others inside your whiteboards</p>
+              <p className="text-xs text-zinc-500">
+                Collaborate with others inside your whiteboards
+              </p>
             </div>
           </div>
 
@@ -124,7 +135,9 @@ export default function RoomsPage() {
             <div className="space-y-1">
               <h3 className="font-semibold text-zinc-300">No rooms found</h3>
               <p className="text-xs text-zinc-500 max-w-xs">
-                {searchQuery ? "No rooms match your search query." : "You haven't joined or created any rooms yet."}
+                {searchQuery
+                  ? "No rooms match your search query."
+                  : "You haven't joined or created any rooms yet."}
               </p>
             </div>
             <Link href="/">
@@ -148,11 +161,14 @@ export default function RoomsPage() {
                         Room
                       </span>
                       <span className="text-[10px] text-zinc-500 font-medium">
-                        {new Date(room.createdAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
+                        {new Date(room.createdAt).toLocaleDateString(
+                          undefined,
+                          {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          },
+                        )}
                       </span>
                     </div>
 

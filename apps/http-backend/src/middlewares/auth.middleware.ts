@@ -11,12 +11,11 @@ export const authMiddleware = (
   res: Response,
   next: NextFunction,
 ) => {
-  const authToken = (req.headers["authorization"] || req.cookies?.["Authorization"] || "") as string;
+  const authToken = (req.headers["authorization"] ||
+    req.cookies?.["Authorization"] ||
+    "") as string;
   try {
-    const decodedUser = jwt.verify(
-      authToken,
-      JWT_SECRET,
-    ) as CustomJwtPayload;
+    const decodedUser = jwt.verify(authToken, JWT_SECRET) as CustomJwtPayload;
 
     if (!decodedUser || !decodedUser.userId) {
       res.status(401).json({ message: "Unauthorized" });

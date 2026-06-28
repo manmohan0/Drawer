@@ -12,5 +12,5 @@ export interface User {
 export const users: User[] = [];
 
 export const roomMembers: {
-  [roomId: string]: WebSocket[]
-} = {}
+  [roomId: string]: WebSocket[];
+} = {};

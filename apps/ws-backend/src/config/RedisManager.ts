@@ -14,7 +14,9 @@ export class RedisManager {
     });
 
     this.subClient = this.client.duplicate();
-    this.subClient.on("error", (err) => console.error("Redis Sub Client Error", err));
+    this.subClient.on("error", (err) =>
+      console.error("Redis Sub Client Error", err),
+    );
     this.subClient.connect().catch((err) => {
       console.error("Redis sub connection failed:", err);
     });

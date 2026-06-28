@@ -8,7 +8,7 @@ const ROTATE_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/s
 /**
  * The `Game` class manages the collaborative whiteboard engine.
  * It coordinates canvas rendering, viewport manipulation (zooming, panning),
- * mouse/keyboard event handling, local shape drawing/editing, and syncs 
+ * mouse/keyboard event handling, local shape drawing/editing, and syncs
  * state transitions in real-time with other clients via a WebSocket connection.
  */
 export class Game {
@@ -43,7 +43,7 @@ export class Game {
   private selectedShape: Shape | null = null;
   // Array of bounding box handles (control points) used to resize/modify the selected shape
   private shapeSelectors: selector[] = [];
-  private rotateIconLocation: { x: number, y: number } | null = null;
+  private rotateIconLocation: { x: number; y: number } | null = null;
   private rotateImg: HTMLImageElement | null;
   private isRotating: boolean = false;
   private focusAnimationId: number | null = null;
@@ -57,7 +57,7 @@ export class Game {
   // Cache for loaded images to draw them synchronously
   private imageCache: Map<string, HTMLImageElement> = new Map();
   //map of userIds and their details
-  private users: Record<string, { firstName: string, lastName: string }> = {};
+  private users: Record<string, { firstName: string; lastName: string }> = {};
   private myUserId: string | null = null;
   private myRole: role | null = null;
   // Stacks to store the history of shapes that can be undone/redone
@@ -81,8 +81,18 @@ export class Game {
   public onMouseMove?: (x: number, y: number) => void;
   public onRoleChange?: (role: role) => void;
   public editingTextShapeId: number | undefined;
-  public onStartTextEdit?: (x: number, y: number, text: string, fontSize: number, onSave: (val: string) => void, onCancel: () => void) => void;
-  public onRoomJoined?: (myUserId: string, users: Record<string, { firstName: string; lastName: string }>) => void;
+  public onStartTextEdit?: (
+    x: number,
+    y: number,
+    text: string,
+    fontSize: number,
+    onSave: (val: string) => void,
+    onCancel: () => void,
+  ) => void;
+  public onRoomJoined?: (
+    myUserId: string,
+    users: Record<string, { firstName: string; lastName: string }>,
+  ) => void;
 
   /**
    * Initializes the Game whiteboard session.
@@ -91,7 +101,12 @@ export class Game {
    * @param ws The established WebSocket connection to sync room updates.
    * @param onSelectionChange Optional callback invoked when the selected shape changes or is edited.
    */
-  constructor(canvas: HTMLCanvasElement, roomId: string, ws: WebSocket, onSelectionChange?: (shape: Shape | null) => void) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    roomId: string,
+    ws: WebSocket,
+    onSelectionChange?: (shape: Shape | null) => void,
+  ) {
     this.canvas = canvas;
     this.roomId = roomId;
     this.ws = ws;
@@ -108,7 +123,7 @@ export class Game {
     this.initHandlers();
     this.initMouseHandlers();
     this.initKeyboardHandlers();
-  };
+  }
 
   /**
    * Sets the active drawing tool.
@@ -135,7 +150,7 @@ export class Game {
 
   setMyRole = (role: role) => {
     this.myRole = role;
-  }
+  };
 
   screenToWorld = (screenX: number, screenY: number) => {
     return {
@@ -235,11 +250,13 @@ export class Game {
     this.redoStack.push(action);
 
     if (action.type === "create") {
-      this.ws.send(JSON.stringify({
-        type: 'delete_shape',
-        roomId: this.roomId,
-        shapeId: action.shapeId,
-      }));
+      this.ws.send(
+        JSON.stringify({
+          type: "delete_shape",
+          roomId: this.roomId,
+          shapeId: action.shapeId,
+        }),
+      );
 
       if (this.selectedShape?.id === action.shapeId) {
         this.selectedShape = null;
@@ -248,15 +265,19 @@ export class Game {
         this.triggerSelectionChange();
       }
     } else if (action.type === "update") {
-      this.ws.send(JSON.stringify({
-        type: "update_shape",
-        roomId: this.roomId,
-        shapeId: action.shapeId,
-        shape: JSON.stringify(action.before),
-        updatedBy: this.myUserId
-      }));
+      this.ws.send(
+        JSON.stringify({
+          type: "update_shape",
+          roomId: this.roomId,
+          shapeId: action.shapeId,
+          shape: JSON.stringify(action.before),
+          updatedBy: this.myUserId,
+        }),
+      );
 
-      const undoShapeId = this.existingShapes.findIndex((shape) => shape.id === action.shapeId);
+      const undoShapeId = this.existingShapes.findIndex(
+        (shape) => shape.id === action.shapeId,
+      );
       if (undoShapeId !== -1) {
         this.existingShapes[undoShapeId] = action.before;
         if (this.selectedShape?.id === action.shapeId) {
@@ -271,12 +292,14 @@ export class Game {
       this.pendingHistoryMap.set(tempHistoryId, action);
       const taggedShape = { ...action.shape, tempHistoryId };
 
-      this.ws.send(JSON.stringify({
-        type: "chat",
-        roomId: this.roomId,
-        shape: JSON.stringify(taggedShape),
-        userId: this.myUserId,
-      }));
+      this.ws.send(
+        JSON.stringify({
+          type: "chat",
+          roomId: this.roomId,
+          shape: JSON.stringify(taggedShape),
+          userId: this.myUserId,
+        }),
+      );
     }
     this.triggerHistoryChange();
   }
@@ -296,22 +319,28 @@ export class Game {
       this.pendingHistoryMap.set(tempHistoryId, action);
       const taggedShape = { ...action.shape, tempHistoryId };
 
-      this.ws.send(JSON.stringify({
-        type: "chat",
-        roomId: this.roomId,
-        shape: JSON.stringify(taggedShape),
-        userId: this.myUserId,
-      }))
+      this.ws.send(
+        JSON.stringify({
+          type: "chat",
+          roomId: this.roomId,
+          shape: JSON.stringify(taggedShape),
+          userId: this.myUserId,
+        }),
+      );
     } else if (action.type === "update") {
-      this.ws.send(JSON.stringify({
-        type: "update_shape",
-        roomId: this.roomId,
-        shapeId: action.shapeId,
-        shape: JSON.stringify(action.after),
-        updatedBy: this.myUserId,
-      }));
+      this.ws.send(
+        JSON.stringify({
+          type: "update_shape",
+          roomId: this.roomId,
+          shapeId: action.shapeId,
+          shape: JSON.stringify(action.after),
+          updatedBy: this.myUserId,
+        }),
+      );
 
-      const redoShapeId = this.existingShapes.findIndex(shape => shape.id === action.shapeId);
+      const redoShapeId = this.existingShapes.findIndex(
+        (shape) => shape.id === action.shapeId,
+      );
 
       if (redoShapeId !== -1) {
         this.existingShapes[redoShapeId] = action.after;
@@ -323,11 +352,13 @@ export class Game {
         this.clearCanvas();
       }
     } else if (action.type === "delete") {
-      this.ws.send(JSON.stringify({
-        type: "delete_shape",
-        roomId: this.roomId,
-        shapeId: action.shapeId,
-      }));
+      this.ws.send(
+        JSON.stringify({
+          type: "delete_shape",
+          roomId: this.roomId,
+          shapeId: action.shapeId,
+        }),
+      );
 
       if (this.selectedShape?.id === action.shapeId) {
         this.selectedShape = null;
@@ -381,7 +412,12 @@ export class Game {
   private checkOverlap = (shapeA: Shape, shapeB: Shape) => {
     const boxA = this.getShapeBoundingBox(shapeA);
     const boxB = this.getShapeBoundingBox(shapeB);
-    return boxA.x1 < boxB.x2 && boxA.x2 > boxB.x1 && boxA.y1 < boxB.y2 && boxA.y2 > boxB.y1;
+    return (
+      boxA.x1 < boxB.x2 &&
+      boxA.x2 > boxB.x1 &&
+      boxA.y1 < boxB.y2 &&
+      boxA.y2 > boxB.y1
+    );
   };
 
   /**
@@ -392,7 +428,7 @@ export class Game {
     shape2: Shape,
     eventType?: EventType,
     shape1FromZ?: number,
-    shape2FromZ?: number
+    shape2FromZ?: number,
   ) => {
     let changed = false;
     let beforeShape1: Shape | null = null;
@@ -412,7 +448,7 @@ export class Game {
             shape: JSON.stringify(shape1),
             fromZ: shape1FromZ,
             toZ: shape1.zIndex,
-          })
+          }),
         );
         changed = true;
       }
@@ -431,7 +467,7 @@ export class Game {
             shape: JSON.stringify(shape2),
             fromZ: shape2FromZ,
             toZ: shape2.zIndex,
-          })
+          }),
         );
         changed = true;
       }
@@ -443,7 +479,7 @@ export class Game {
             type: "update",
             shapeId: shape1.id,
             before: beforeShape1,
-            after: { ...shape1 }
+            after: { ...shape1 },
           });
         }
         if (beforeShape2 && shape2.id) {
@@ -451,7 +487,7 @@ export class Game {
             type: "update",
             shapeId: shape2.id,
             before: beforeShape2,
-            after: { ...shape2 }
+            after: { ...shape2 },
           });
         }
         this.redoStack = [];
@@ -459,12 +495,14 @@ export class Game {
       }
 
       this.existingShapes.sort((a, b) => {
-        const zA = (a.zIndex || 0);
-        const zB = (b.zIndex || 0);
+        const zA = a.zIndex || 0;
+        const zB = b.zIndex || 0;
         return zA - zB;
       });
       if (this.selectedShape) {
-        const found = this.existingShapes.find((s) => s.id === this.selectedShape?.id);
+        const found = this.existingShapes.find(
+          (s) => s.id === this.selectedShape?.id,
+        );
         if (found) {
           this.selectedShape = found;
           this.updateSelectors(found);
@@ -484,7 +522,9 @@ export class Game {
 
     // Get all non-pointer shapes that overlap with the selected shape, including itself
     const overlapping = this.existingShapes.filter(
-      (s) => (s.id === this.selectedShape?.id || (this.selectedShape && this.checkOverlap(this.selectedShape, s)))
+      (s) =>
+        s.id === this.selectedShape?.id ||
+        (this.selectedShape && this.checkOverlap(this.selectedShape, s)),
     );
 
     if (overlapping.length <= 1) {
@@ -492,9 +532,13 @@ export class Game {
       return;
     }
 
-    const selectedIdx = overlapping.findIndex((s) => s.id === this.selectedShape?.id);
+    const selectedIdx = overlapping.findIndex(
+      (s) => s.id === this.selectedShape?.id,
+    );
     if (selectedIdx === -1 || selectedIdx === overlapping.length - 1) {
-      console.log("Selected shape is already at the front of overlapping shapes.");
+      console.log(
+        "Selected shape is already at the front of overlapping shapes.",
+      );
       return;
     }
 
@@ -513,7 +557,13 @@ export class Game {
       updatedNext = { ...nextShape, zIndex: curZ } as Shape;
     }
 
-    this.updateTwoShapes(updatedSelected, updatedNext, EventType.CHANGE_LAYER, curZ, nextZ);
+    this.updateTwoShapes(
+      updatedSelected,
+      updatedNext,
+      EventType.CHANGE_LAYER,
+      curZ,
+      nextZ,
+    );
   };
 
   /**
@@ -525,8 +575,9 @@ export class Game {
 
     // Get all non-pointer shapes that overlap with the selected shape, including itself
     const overlapping = this.existingShapes.filter(
-      (s) => (s.id === this.selectedShape?.id ||
-        (this.selectedShape && this.checkOverlap(this.selectedShape, s)))
+      (s) =>
+        s.id === this.selectedShape?.id ||
+        (this.selectedShape && this.checkOverlap(this.selectedShape, s)),
     );
 
     if (overlapping.length <= 1) {
@@ -534,9 +585,13 @@ export class Game {
       return;
     }
 
-    const selectedIdx = overlapping.findIndex((s) => s.id === this.selectedShape?.id);
+    const selectedIdx = overlapping.findIndex(
+      (s) => s.id === this.selectedShape?.id,
+    );
     if (selectedIdx === -1 || selectedIdx === 0) {
-      console.log("Selected shape is already at the back of overlapping shapes.");
+      console.log(
+        "Selected shape is already at the back of overlapping shapes.",
+      );
       return;
     }
 
@@ -555,7 +610,13 @@ export class Game {
       updatedPrev = { ...prevShape, zIndex: curZ } as Shape;
     }
 
-    this.updateTwoShapes(updatedSelected, updatedPrev, EventType.CHANGE_LAYER, curZ, prevZ);
+    this.updateTwoShapes(
+      updatedSelected,
+      updatedPrev,
+      EventType.CHANGE_LAYER,
+      curZ,
+      prevZ,
+    );
   };
 
   /**
@@ -581,7 +642,7 @@ export class Game {
   /**
    * Translates viewport-relative screen coordinates to zoom/pan-independent world coordinates.
    * This is critical to ensure shapes are drawn at the correct coordinates regardless of current zoom level or pan offsets.
-   * 
+   *
    * @param e Mouse event containing raw viewport client coordinates.
    * @returns Object containing the calculated coordinates {x, y} in the game world space.
    */
@@ -593,7 +654,7 @@ export class Game {
   /**
    * Retrieves an image from the cache if loaded, or starts loading it.
    * Triggers a canvas redraw once the image finishes loading.
-   * 
+   *
    * @param src The source URL of the image.
    * @returns The HTMLImageElement if loaded, or null if still loading.
    */
@@ -622,7 +683,7 @@ export class Game {
    * Calculates the aspect ratio of the image.
    * If the image is loaded, returns its natural aspect ratio.
    * Otherwise, falls back to 1.0 (square).
-   * 
+   *
    * @param src The source URL of the image.
    * @returns Aspect ratio as a number.
    */
@@ -637,7 +698,7 @@ export class Game {
   /**
    * Prompts the user to select an image file, converts it to base64,
    * updates the shape URL, and broadcasts the update via WebSocket.
-   * 
+   *
    * @param shape The image shape to update.
    */
   private triggerImageUpload = (shape: Shape) => {
@@ -691,7 +752,7 @@ export class Game {
 
           const delta = {
             url: shape.url,
-            height: shape.height
+            height: shape.height,
           };
 
           this.updateSelectors(shape);
@@ -704,7 +765,7 @@ export class Game {
               roomId: this.roomId,
               shapeId: shape.id || -1,
               shape: JSON.stringify(delta),
-            })
+            }),
           );
         };
         tempImg.src = base64Url;
@@ -716,7 +777,12 @@ export class Game {
     input.click();
   };
 
-  focusOnCoordinates = (startX: number, startY: number, endX: number, endY: number) => {
+  focusOnCoordinates = (
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+  ) => {
     if (this.focusAnimationId !== null) {
       cancelAnimationFrame(this.focusAnimationId);
     }
@@ -724,7 +790,12 @@ export class Game {
     const targetWidth = endX - startX;
     const targetHeight = endY - startY;
 
-    if (isNaN(targetWidth) || targetWidth <= 0 || isNaN(targetHeight) || targetHeight <= 0) {
+    if (
+      isNaN(targetWidth) ||
+      targetWidth <= 0 ||
+      isNaN(targetHeight) ||
+      targetHeight <= 0
+    ) {
       return;
     }
 
@@ -784,15 +855,17 @@ export class Game {
     const canvasEndX = end.x;
     const canvasEndY = end.y;
 
-    this.ws.send(JSON.stringify({
-      type: "change_screen_coordinates",
-      userId: this.myUserId,
-      roomId: this.roomId,
-      canvasStartX,
-      canvasStartY,
-      canvasEndX,
-      canvasEndY,
-    }));
+    this.ws.send(
+      JSON.stringify({
+        type: "change_screen_coordinates",
+        userId: this.myUserId,
+        roomId: this.roomId,
+        canvasStartX,
+        canvasStartY,
+        canvasEndX,
+        canvasEndY,
+      }),
+    );
   };
 
   debouncedUpdateScreenCoordinates = () => {
@@ -808,28 +881,37 @@ export class Game {
   private getShapeCenters = (shape: Shape) => {
     switch (shape.type) {
       case "rectangle": {
-        return { centerX: shape.startX + shape.width / 2, centerY: shape.startY + shape.height / 2 };
+        return {
+          centerX: shape.startX + shape.width / 2,
+          centerY: shape.startY + shape.height / 2,
+        };
       }
       case "circle": {
         return { centerX: shape.centerX, centerY: shape.centerY };
       }
       case "line": {
-        return { centerX: shape.startX + (shape.endX - shape.startX) / 2, centerY: shape.startY + (shape.endY - shape.startY) / 2 }
+        return {
+          centerX: shape.startX + (shape.endX - shape.startX) / 2,
+          centerY: shape.startY + (shape.endY - shape.startY) / 2,
+        };
       }
       case "image": {
-        return { centerX: shape.startX + shape.width / 2, centerY: shape.startY + shape.height / 2 };
+        return {
+          centerX: shape.startX + shape.width / 2,
+          centerY: shape.startY + shape.height / 2,
+        };
       }
       case "text": {
         return { centerX: shape.startX, centerY: shape.startY };
       }
       default: {
-        return { centerX: 0, centerY: 0 }
+        return { centerX: 0, centerY: 0 };
       }
     }
-  }
+  };
   /**
    * Handles the 'mousedown' event.
-   * Responsible for initiating drawing, entering viewport pan mode, selecting shapes, 
+   * Responsible for initiating drawing, entering viewport pan mode, selecting shapes,
    * or picking resize selectors/handles for shape manipulation.
    */
   mouseDownHandler = (e: MouseEvent) => {
@@ -855,7 +937,12 @@ export class Game {
     }
 
     if (this.rotateIconLocation && this.selectedShape) {
-      if (x > this.rotateIconLocation.x - 10 && x < this.rotateIconLocation.x + 20 && y > this.rotateIconLocation.y - 10 && y < this.rotateIconLocation.y + 20) {
+      if (
+        x > this.rotateIconLocation.x - 10 &&
+        x < this.rotateIconLocation.x + 20 &&
+        y > this.rotateIconLocation.y - 10 &&
+        y < this.rotateIconLocation.y + 20
+      ) {
         this.originalShape = JSON.parse(JSON.stringify(this.selectedShape));
         this.isRotating = true;
         return;
@@ -869,7 +956,12 @@ export class Game {
       // Store a deep copy of the selected shape configuration to track offset modifications accurately
       this.originalShape = JSON.parse(JSON.stringify(this.selectedShape));
 
-      if (hit && hit !== "rotate" && hit.type === "selector" && this.selectedShape) {
+      if (
+        hit &&
+        hit !== "rotate" &&
+        hit.type === "selector" &&
+        this.selectedShape
+      ) {
         // User clicked directly on a resize selector handle
         this.draggedSelector = hit;
       } else {
@@ -881,7 +973,7 @@ export class Game {
 
   /**
    * Handles the 'mousemove' event.
-   * Manages active viewport panning, rendering drawing previews, dragging/resizing shapes, 
+   * Manages active viewport panning, rendering drawing previews, dragging/resizing shapes,
    * and dragging complete shapes across the canvas coordinate space.
    */
   mouseMoveHandler = (e: MouseEvent) => {
@@ -941,27 +1033,45 @@ export class Game {
         if (Math.abs(width) > Math.abs(height) * aspectRatio) {
           drawWidth = Math.sign(width) * Math.abs(height) * aspectRatio;
         } else {
-          drawHeight = Math.sign(height) * Math.abs(width) / aspectRatio;
+          drawHeight = (Math.sign(height) * Math.abs(width)) / aspectRatio;
         }
         this.ctx.strokeRect(this.startX, this.startY, drawWidth, drawHeight);
-        this.ctx.strokeRect(this.startX + drawWidth / 3, this.startY + drawHeight / 3, drawWidth / 3, drawHeight / 3);
+        this.ctx.strokeRect(
+          this.startX + drawWidth / 3,
+          this.startY + drawHeight / 3,
+          drawWidth / 3,
+          drawHeight / 3,
+        );
         const img = this.getImage("/add-image.png");
         if (img) {
-          this.ctx.drawImage(img, this.startX + drawWidth / 3, this.startY + drawHeight / 3, drawWidth / 3, drawHeight / 3);
+          this.ctx.drawImage(
+            img,
+            this.startX + drawWidth / 3,
+            this.startY + drawHeight / 3,
+            drawWidth / 3,
+            drawHeight / 3,
+          );
         }
         this.ctx.restore();
       }
     }
 
     // Editing mode logic: Resizing or moving selected shapes
-    if (this.isClicked && this.selectedShape && this.originalShape && !this.isPan) {
+    if (
+      this.isClicked &&
+      this.selectedShape &&
+      this.originalShape &&
+      !this.isPan
+    ) {
       const deltaX = currentX - this.startX;
       const deltaY = currentY - this.startY;
       if (this.isRotating && this.rotateIconLocation) {
         const { centerX, centerY } = this.getShapeCenters(this.selectedShape);
 
         // Calculate angle and offset by 90 degrees since the handle is at the top (-90 degrees)
-        const angle = Math.atan2(currentY - centerY, currentX - centerX) * (180 / Math.PI) + 90;
+        const angle =
+          Math.atan2(currentY - centerY, currentX - centerX) * (180 / Math.PI) +
+          90;
 
         if (this.selectedShape.type !== "text") {
           this.selectedShape.angle = angle;
@@ -975,15 +1085,17 @@ export class Game {
       if (this.draggedSelector) {
         // CASE A: Dragging a specific resize handle
         if (
-          (this.selectedShape.type === "rectangle" || this.selectedShape.type === "image") &&
-          (this.originalShape.type === "rectangle" || this.originalShape.type === "image")
+          (this.selectedShape.type === "rectangle" ||
+            this.selectedShape.type === "image") &&
+          (this.originalShape.type === "rectangle" ||
+            this.originalShape.type === "image")
         ) {
           const originalRect = this.originalShape;
           const rect = this.selectedShape;
           const selectorId = this.draggedSelector.id;
 
-          const { centerX, centerY } = this.getShapeCenters(originalRect)
-          const rad = (originalRect.angle || 0) * Math.PI / 180;
+          const { centerX, centerY } = this.getShapeCenters(originalRect);
+          const rad = ((originalRect.angle || 0) * Math.PI) / 180;
           const w = originalRect.width;
           const h = originalRect.height;
 
@@ -1016,7 +1128,7 @@ export class Game {
           const sinNeg = Math.sin(-rad);
           const localM = {
             x: dx * cosNeg - dy * sinNeg,
-            y: dx * sinNeg + dy * cosNeg
+            y: dx * sinNeg + dy * cosNeg,
           };
 
           let dragged_local = { x: 0, y: 0 };
@@ -1025,22 +1137,27 @@ export class Game {
             // Keep aspect ratio for images
             const original_diagonal = {
               x: dragged_corner_local.x - fixed_corner_local.x,
-              y: dragged_corner_local.y - fixed_corner_local.y
+              y: dragged_corner_local.y - fixed_corner_local.y,
             };
             const new_diagonal_local = {
               x: localM.x - fixed_corner_local.x,
-              y: localM.y - fixed_corner_local.y
+              y: localM.y - fixed_corner_local.y,
             };
             const denom = original_diagonal.x ** 2 + original_diagonal.y ** 2;
-            const k = denom !== 0 ? (new_diagonal_local.x * original_diagonal.x + new_diagonal_local.y * original_diagonal.y) / denom : 0;
+            const k =
+              denom !== 0
+                ? (new_diagonal_local.x * original_diagonal.x +
+                    new_diagonal_local.y * original_diagonal.y) /
+                  denom
+                : 0;
 
             const constrained_diagonal = {
               x: k * original_diagonal.x,
-              y: k * original_diagonal.y
+              y: k * original_diagonal.y,
             };
             dragged_local = {
               x: fixed_corner_local.x + constrained_diagonal.x,
-              y: fixed_corner_local.y + constrained_diagonal.y
+              y: fixed_corner_local.y + constrained_diagonal.y,
             };
           } else {
             // Allow non-uniform scaling for normal rectangles
@@ -1052,13 +1169,15 @@ export class Game {
 
           const newLocalCenter = {
             x: (dragged_local.x + fixed_corner_local.x) / 2,
-            y: (dragged_local.y + fixed_corner_local.y) / 2
+            y: (dragged_local.y + fixed_corner_local.y) / 2,
           };
 
           const cosPos = Math.cos(rad);
           const sinPos = Math.sin(rad);
-          const newCx = centerX + newLocalCenter.x * cosPos - newLocalCenter.y * sinPos;
-          const newCy = centerY + newLocalCenter.x * sinPos + newLocalCenter.y * cosPos;
+          const newCx =
+            centerX + newLocalCenter.x * cosPos - newLocalCenter.y * sinPos;
+          const newCy =
+            centerY + newLocalCenter.x * sinPos + newLocalCenter.y * cosPos;
 
           rect.width = newWidth;
           rect.height = newHeight;
@@ -1077,7 +1196,7 @@ export class Game {
           // Resize circle by adjusting the radius relative to delta moves
           circle.radius = Math.sqrt(
             (originalCircle.radius + deltaX) ** 2 +
-            (originalCircle.radius + deltaY) ** 2
+              (originalCircle.radius + deltaY) ** 2,
           );
 
           this.updateSelectors(circle);
@@ -1090,8 +1209,9 @@ export class Game {
           const originalLine = this.originalShape;
           const selectorId = this.draggedSelector.id;
 
-          const { centerX: origCenterX, centerY: origCenterY } = this.getShapeCenters(originalLine);
-          const rad = (originalLine.angle || 0) * Math.PI / 180;
+          const { centerX: origCenterX, centerY: origCenterY } =
+            this.getShapeCenters(originalLine);
+          const rad = ((originalLine.angle || 0) * Math.PI) / 180;
 
           // Calculate current rotated world endpoints of the original line
           const getRotatedPoint = (x: number, y: number) => {
@@ -1099,12 +1219,18 @@ export class Game {
             const dy = y - origCenterY;
             return {
               x: origCenterX + dx * Math.cos(rad) - dy * Math.sin(rad),
-              y: origCenterY + dx * Math.sin(rad) + dy * Math.cos(rad)
+              y: origCenterY + dx * Math.sin(rad) + dy * Math.cos(rad),
             };
           };
 
-          const origWStart = getRotatedPoint(originalLine.startX, originalLine.startY);
-          const origWEnd = getRotatedPoint(originalLine.endX, originalLine.endY);
+          const origWStart = getRotatedPoint(
+            originalLine.startX,
+            originalLine.startY,
+          );
+          const origWEnd = getRotatedPoint(
+            originalLine.endX,
+            originalLine.endY,
+          );
 
           let W_start = { x: 0, y: 0 };
           let W_end = { x: 0, y: 0 };
@@ -1142,21 +1268,29 @@ export class Game {
       } else {
         // CASE B: Moving the entire shape (dragging by body rather than selectors)
         if (
-          (this.selectedShape.type === "rectangle" || this.selectedShape.type === "image") &&
-          (this.originalShape.type === "rectangle" || this.originalShape.type === "image")
+          (this.selectedShape.type === "rectangle" ||
+            this.selectedShape.type === "image") &&
+          (this.originalShape.type === "rectangle" ||
+            this.originalShape.type === "image")
         ) {
           const rect = this.selectedShape;
           rect.startX = this.originalShape.startX + deltaX;
           rect.startY = this.originalShape.startY + deltaY;
 
           this.updateSelectors(rect);
-        } else if (this.selectedShape.type === "circle" && this.originalShape.type === "circle") {
+        } else if (
+          this.selectedShape.type === "circle" &&
+          this.originalShape.type === "circle"
+        ) {
           const circle = this.selectedShape;
           circle.centerX = this.originalShape.centerX + deltaX;
           circle.centerY = this.originalShape.centerY + deltaY;
 
           this.updateSelectors(circle);
-        } else if (this.selectedShape.type === "line" && this.originalShape.type === "line") {
+        } else if (
+          this.selectedShape.type === "line" &&
+          this.originalShape.type === "line"
+        ) {
           const line = this.selectedShape;
           line.startX = this.originalShape.startX + deltaX;
           line.startY = this.originalShape.startY + deltaY;
@@ -1164,7 +1298,10 @@ export class Game {
           line.endY = this.originalShape.endY + deltaY;
 
           this.updateSelectors(line);
-        } else if (this.selectedShape.type === "text" && this.originalShape.type === "text") {
+        } else if (
+          this.selectedShape.type === "text" &&
+          this.originalShape.type === "text"
+        ) {
           const textShape = this.selectedShape;
           textShape.startX = this.originalShape.startX + deltaX;
           textShape.startY = this.originalShape.startY + deltaY;
@@ -1200,7 +1337,10 @@ export class Game {
     }
 
     // If we were resizing or moving an existing shape, push the update to the server
-    if (this.draggedSelector || (this.selectedTool === "pointer" && this.originalShape)) {
+    if (
+      this.draggedSelector ||
+      (this.selectedTool === "pointer" && this.originalShape)
+    ) {
       this.isClicked = false;
 
       const selectedShape = this.selectedShape;
@@ -1218,11 +1358,16 @@ export class Game {
         shapeId = selectedShape.id;
       }
 
-      let eventType = this.isRotating ? "ROTATE_SHAPE" : this.draggedSelector ? "SCALE_SHAPE" : "MOVE_SHAPE";
+      let eventType = this.isRotating
+        ? "ROTATE_SHAPE"
+        : this.draggedSelector
+          ? "SCALE_SHAPE"
+          : "MOVE_SHAPE";
 
       // 1. Normalize shapes and update selectors
       if (
-        (selectedShape.type === "rectangle" || selectedShape.type === "image") &&
+        (selectedShape.type === "rectangle" ||
+          selectedShape.type === "image") &&
         (originalShape.type === "rectangle" || originalShape.type === "image")
       ) {
         const rect = selectedShape;
@@ -1235,7 +1380,10 @@ export class Game {
           rect.height = Math.abs(rect.height);
         }
         this.updateSelectors(rect);
-      } else if (selectedShape.type === "circle" && originalShape.type === "circle") {
+      } else if (
+        selectedShape.type === "circle" &&
+        originalShape.type === "circle"
+      ) {
         const circle = selectedShape;
         if (circle.radius < 0) {
           circle.centerX = circle.centerX + circle.radius;
@@ -1249,32 +1397,72 @@ export class Game {
       let didChange = false;
       if (eventType === "MOVE_SHAPE") {
         if (
-          (selectedShape.type === "rectangle" || selectedShape.type === "image" || selectedShape.type === "text") &&
-          (originalShape.type === "rectangle" || originalShape.type === "image" || originalShape.type === "text")
+          (selectedShape.type === "rectangle" ||
+            selectedShape.type === "image" ||
+            selectedShape.type === "text") &&
+          (originalShape.type === "rectangle" ||
+            originalShape.type === "image" ||
+            originalShape.type === "text")
         ) {
-          didChange = selectedShape.startX !== originalShape.startX || selectedShape.startY !== originalShape.startY;
-        } else if (selectedShape.type === "circle" && originalShape.type === "circle") {
-          didChange = selectedShape.centerX !== originalShape.centerX || selectedShape.centerY !== originalShape.centerY;
-        } else if (selectedShape.type === "line" && originalShape.type === "line") {
-          didChange = selectedShape.startX !== originalShape.startX || selectedShape.startY !== originalShape.startY || selectedShape.endX !== originalShape.endX || selectedShape.endY !== originalShape.endY;
-        } else if (selectedShape.type === "text" && originalShape.type === "text") {
-          didChange = selectedShape.startX !== originalShape.startX || selectedShape.startY !== originalShape.startY;
+          didChange =
+            selectedShape.startX !== originalShape.startX ||
+            selectedShape.startY !== originalShape.startY;
+        } else if (
+          selectedShape.type === "circle" &&
+          originalShape.type === "circle"
+        ) {
+          didChange =
+            selectedShape.centerX !== originalShape.centerX ||
+            selectedShape.centerY !== originalShape.centerY;
+        } else if (
+          selectedShape.type === "line" &&
+          originalShape.type === "line"
+        ) {
+          didChange =
+            selectedShape.startX !== originalShape.startX ||
+            selectedShape.startY !== originalShape.startY ||
+            selectedShape.endX !== originalShape.endX ||
+            selectedShape.endY !== originalShape.endY;
+        } else if (
+          selectedShape.type === "text" &&
+          originalShape.type === "text"
+        ) {
+          didChange =
+            selectedShape.startX !== originalShape.startX ||
+            selectedShape.startY !== originalShape.startY;
         }
       } else if (eventType === "SCALE_SHAPE") {
         if (
-          (selectedShape.type === "rectangle" || selectedShape.type === "image") &&
+          (selectedShape.type === "rectangle" ||
+            selectedShape.type === "image") &&
           (originalShape.type === "rectangle" || originalShape.type === "image")
         ) {
-          didChange = selectedShape.width !== originalShape.width || selectedShape.height !== originalShape.height;
-        } else if (selectedShape.type === "circle" && originalShape.type === "circle") {
+          didChange =
+            selectedShape.width !== originalShape.width ||
+            selectedShape.height !== originalShape.height;
+        } else if (
+          selectedShape.type === "circle" &&
+          originalShape.type === "circle"
+        ) {
           didChange = selectedShape.radius !== originalShape.radius;
-        } else if (selectedShape.type === "line" && originalShape.type === "line") {
-          didChange = selectedShape.startX !== originalShape.startX || selectedShape.startY !== originalShape.startY || selectedShape.endX !== originalShape.endX || selectedShape.endY !== originalShape.endY;
+        } else if (
+          selectedShape.type === "line" &&
+          originalShape.type === "line"
+        ) {
+          didChange =
+            selectedShape.startX !== originalShape.startX ||
+            selectedShape.startY !== originalShape.startY ||
+            selectedShape.endX !== originalShape.endX ||
+            selectedShape.endY !== originalShape.endY;
         }
       } else if (eventType === "ROTATE_SHAPE") {
         if (
-          (selectedShape.type === "rectangle" || selectedShape.type === "image" || selectedShape.type === "line") &&
-          (originalShape.type === "rectangle" || originalShape.type === "image" || originalShape.type === "line")
+          (selectedShape.type === "rectangle" ||
+            selectedShape.type === "image" ||
+            selectedShape.type === "line") &&
+          (originalShape.type === "rectangle" ||
+            originalShape.type === "image" ||
+            originalShape.type === "line")
         ) {
           didChange = (selectedShape.angle || 0) !== (originalShape.angle || 0);
         }
@@ -1297,14 +1485,20 @@ export class Game {
 
         let extraFields: Record<string, any> = {};
         if (eventType === "MOVE_SHAPE") {
-          if (selectedShape.type === "circle" && originalShape.type === "circle") {
+          if (
+            selectedShape.type === "circle" &&
+            originalShape.type === "circle"
+          ) {
             extraFields = {
               fromX: originalShape.centerX,
               fromY: originalShape.centerY,
               toX: selectedShape.centerX,
               toY: selectedShape.centerY,
             };
-          } else if (selectedShape.type === "line" && originalShape.type === "line") {
+          } else if (
+            selectedShape.type === "line" &&
+            originalShape.type === "line"
+          ) {
             extraFields = {
               fromStartX: originalShape.startX,
               fromStartY: originalShape.startY,
@@ -1315,7 +1509,10 @@ export class Game {
               toEndX: selectedShape.endX,
               toEndY: selectedShape.endY,
             };
-          } else if (selectedShape.type !== "circle" && originalShape.type !== "circle") {
+          } else if (
+            selectedShape.type !== "circle" &&
+            originalShape.type !== "circle"
+          ) {
             extraFields = {
               fromX: (originalShape as any).startX || 0,
               fromY: (originalShape as any).startY || 0,
@@ -1325,8 +1522,10 @@ export class Game {
           }
         } else if (eventType === "SCALE_SHAPE") {
           if (
-            (selectedShape.type === "rectangle" || selectedShape.type === "image") &&
-            (originalShape.type === "rectangle" || originalShape.type === "image")
+            (selectedShape.type === "rectangle" ||
+              selectedShape.type === "image") &&
+            (originalShape.type === "rectangle" ||
+              originalShape.type === "image")
           ) {
             extraFields = {
               fromWidth: originalShape.width,
@@ -1334,12 +1533,18 @@ export class Game {
               toWidth: selectedShape.width,
               toHeight: selectedShape.height,
             };
-          } else if (selectedShape.type === "circle" && originalShape.type === "circle") {
+          } else if (
+            selectedShape.type === "circle" &&
+            originalShape.type === "circle"
+          ) {
             extraFields = {
               fromRadius: originalShape.radius,
               toRadius: selectedShape.radius,
             };
-          } else if (selectedShape.type === "line" && originalShape.type === "line") {
+          } else if (
+            selectedShape.type === "line" &&
+            originalShape.type === "line"
+          ) {
             extraFields = {
               fromStartX: originalShape.startX,
               fromStartY: originalShape.startY,
@@ -1349,8 +1554,12 @@ export class Game {
           }
         } else if (eventType === "ROTATE_SHAPE") {
           if (
-            (selectedShape.type === "rectangle" || selectedShape.type === "image" || selectedShape.type === "line") &&
-            (originalShape.type === "rectangle" || originalShape.type === "image" || originalShape.type === "line")
+            (selectedShape.type === "rectangle" ||
+              selectedShape.type === "image" ||
+              selectedShape.type === "line") &&
+            (originalShape.type === "rectangle" ||
+              originalShape.type === "image" ||
+              originalShape.type === "line")
           ) {
             extraFields = {
               fromAngle: originalShape.angle || 0,
@@ -1366,8 +1575,8 @@ export class Game {
             shapeId: shapeId,
             shape: JSON.stringify(selectedShape),
             updatedBy: this.myUserId,
-            ...extraFields
-          })
+            ...extraFields,
+          }),
         );
       }
 
@@ -1429,7 +1638,7 @@ export class Game {
       if (Math.abs(width) > Math.abs(height) * aspectRatio) {
         drawWidth = Math.sign(width) * Math.abs(height) * aspectRatio;
       } else {
-        drawHeight = Math.sign(height) * Math.abs(width) / aspectRatio;
+        drawHeight = (Math.sign(height) * Math.abs(width)) / aspectRatio;
       }
       shape = {
         type: this.selectedTool,
@@ -1449,14 +1658,14 @@ export class Game {
         type: "chat",
         roomId: this.roomId,
         shape: JSON.stringify(shape),
-        userId: this.myUserId
-      })
+        userId: this.myUserId,
+      }),
     );
   };
 
   /**
    * Handles the 'click' event.
-   * Manages shape selection when using the "pointer" tool. Computes what item (shape or selector handle) 
+   * Manages shape selection when using the "pointer" tool. Computes what item (shape or selector handle)
    * was clicked and spawns the resize handle overlays.
    */
   mouseClickHandler = (e: MouseEvent) => {
@@ -1474,8 +1683,7 @@ export class Game {
         // Clicked on a resize handle selector -> Selection state remains unchanged
       } else if (hitResult === "rotate") {
         // Clicked on the rotate icon
-      }
-      else {
+      } else {
         // Clicked on a shape body -> Set selection and build corresponding resize handle coordinates
         this.selectedShape = hitResult;
         this.triggerSelectionChange();
@@ -1483,18 +1691,25 @@ export class Game {
         // Check if clicked inside the middle 1/3 of an image placeholder shape to trigger upload
         if (hitResult.type === "image" && !hitResult.url) {
           const { centerX, centerY } = this.getShapeCenters(hitResult);
-          const rad = (hitResult.angle || 0) * Math.PI / 180;
+          const rad = ((hitResult.angle || 0) * Math.PI) / 180;
           const dx_click = x - centerX;
           const dy_click = y - centerY;
-          const unrotatedX = centerX + dx_click * Math.cos(-rad) - dy_click * Math.sin(-rad);
-          const unrotatedY = centerY + dx_click * Math.sin(-rad) + dy_click * Math.cos(-rad);
+          const unrotatedX =
+            centerX + dx_click * Math.cos(-rad) - dy_click * Math.sin(-rad);
+          const unrotatedY =
+            centerY + dx_click * Math.sin(-rad) + dy_click * Math.cos(-rad);
 
           const midXMin = hitResult.startX + hitResult.width / 3;
           const midXMax = hitResult.startX + (2 * hitResult.width) / 3;
           const midYMin = hitResult.startY + hitResult.height / 3;
           const midYMax = hitResult.startY + (2 * hitResult.height) / 3;
 
-          if (unrotatedX >= midXMin && unrotatedX <= midXMax && unrotatedY >= midYMin && unrotatedY <= midYMax) {
+          if (
+            unrotatedX >= midXMin &&
+            unrotatedX <= midXMax &&
+            unrotatedY >= midYMin &&
+            unrotatedY <= midYMax
+          ) {
             this.triggerImageUpload(hitResult);
             this.clearCanvas();
             return;
@@ -1542,7 +1757,7 @@ export class Game {
           roomId: this.roomId,
           shapeId: shape.id,
           shape: JSON.stringify(shape),
-        })
+        }),
       );
       this.clearCanvas();
     }
@@ -1577,10 +1792,10 @@ export class Game {
               eventType: EventType.CREATE_SHAPE,
               shape: JSON.stringify(shape),
               userId: this.myUserId,
-            })
+            }),
           );
         },
-        () => { }
+        () => {},
       );
     }
   };
@@ -1593,9 +1808,16 @@ export class Game {
 
       if (hitResult && hitResult !== "rotate" && hitResult.type === "image") {
         this.triggerImageUpload(hitResult);
-      } else if (hitResult && hitResult !== "rotate" && hitResult.type === "text") {
+      } else if (
+        hitResult &&
+        hitResult !== "rotate" &&
+        hitResult.type === "text"
+      ) {
         const canvasRect = this.canvas.getBoundingClientRect();
-        const screenPos = this.worldToScreen(hitResult.startX, hitResult.startY);
+        const screenPos = this.worldToScreen(
+          hitResult.startX,
+          hitResult.startY,
+        );
         const screenX = canvasRect.left + screenPos.x;
         const screenY = canvasRect.top + screenPos.y;
 
@@ -1622,7 +1844,7 @@ export class Game {
           () => {
             this.editingTextShapeId = undefined;
             this.clearCanvas();
-          }
+          },
         );
       }
     }
@@ -1663,13 +1885,12 @@ export class Game {
     }
   };
 
-
   /**
    * Handles the keyboard 'keydown' event.
    * Activates pan mode when the Spacebar key is depressed.
    */
   keyboardDownHandler = (e: KeyboardEvent) => {
-    if (e.key === ' ') {
+    if (e.key === " ") {
       this.isPan = true;
     }
   };
@@ -1679,7 +1900,7 @@ export class Game {
    * Deactivates pan mode when the Spacebar key is released.
    */
   keyboardUpHandler = (e: KeyboardEvent) => {
-    if (e.key === ' ') {
+    if (e.key === " ") {
       this.isPan = false;
       this.updateScreenCoordinates();
     }
@@ -1704,7 +1925,7 @@ export class Game {
       return;
     }
 
-    if (e.key === 'Delete') {
+    if (e.key === "Delete") {
       if (this.selectedShape) {
         this.deleteSelectedShape();
         return;
@@ -1723,7 +1944,7 @@ export class Game {
             eventType: EventType.CREATE_SHAPE,
             shape: JSON.stringify(shape),
             userId: this.myUserId,
-          })
+          }),
         );
       }
     }
@@ -1777,7 +1998,7 @@ export class Game {
             roomId: this.roomId,
             shape: JSON.stringify(shape),
             userId: this.myUserId,
-          })
+          }),
         );
       }
     }
@@ -1793,20 +2014,25 @@ export class Game {
     }
   };
 
-  updateShape = (updatedShape: Shape, eventType?: EventType, extraFields?: Record<string, any>) => {
+  updateShape = (
+    updatedShape: Shape,
+    eventType?: EventType,
+    extraFields?: Record<string, any>,
+  ) => {
     if (this.myRole === "Viewer") return;
     if (updatedShape.id) {
       updatedShape.updatedByUserId = this.myUserId || undefined;
-      const shapeIndex = this.existingShapes.findIndex((s) => s.id === updatedShape.id);
+      const shapeIndex = this.existingShapes.findIndex(
+        (s) => s.id === updatedShape.id,
+      );
       if (shapeIndex !== -1) {
-
         if (!this.isUndoingRedoing) {
           this.undoStack.push({
             type: "update",
             shapeId: updatedShape.id,
             before: { ...this.existingShapes[shapeIndex] },
-            after: { ...updatedShape }
-          })
+            after: { ...updatedShape },
+          });
           this.redoStack = [];
           this.triggerHistoryChange();
         }
@@ -1825,7 +2051,7 @@ export class Game {
             shapeId: updatedShape.id,
             shape: JSON.stringify(updatedShape),
             ...extraFields,
-          })
+          }),
         );
       }
     }
@@ -1839,8 +2065,8 @@ export class Game {
       this.undoStack.push({
         type: "delete",
         shapeId: this.selectedShape.id as number,
-        shape: { ...this.selectedShape }
-      })
+        shape: { ...this.selectedShape },
+      });
       this.redoStack = [];
       this.triggerHistoryChange();
     }
@@ -1850,7 +2076,7 @@ export class Game {
         type: "delete_shape",
         roomId: this.roomId,
         shapeId: this.selectedShape.id || -1,
-      })
+      }),
     );
     // this.existingShapes = this.existingShapes.filter((shape) => (shape.type !== "pointer" && shape.id) !== (this.selectedShape!.type !== "pointer" && this.selectedShape!.id));
     // this.selectedShape = null;
@@ -1866,7 +2092,7 @@ export class Game {
       this.undoStack.push({
         type: "delete",
         shapeId: shape.id,
-        shape: { ...shape }
+        shape: { ...shape },
       });
       this.redoStack = [];
       this.triggerHistoryChange();
@@ -1876,20 +2102,20 @@ export class Game {
         type: "delete_shape",
         roomId: this.roomId,
         shapeId: id,
-      })
+      }),
     );
   };
   /**
    * Dynamically constructs the interactive resize handles (selectors) for the selected shape.
    * Handlers scale inverse to the zoom level so they remain visually legible at different zoom levels.
-   * 
+   *
    * @param shape The shape currently selected.
    */
   updateSelectors = (shape: Shape) => {
     if (shape.type === "rectangle" || shape.type === "image") {
       const radius = 6;
-      const { centerX, centerY } = this.getShapeCenters(shape)
-      const rad = (shape.angle || 0) * Math.PI / 180;
+      const { centerX, centerY } = this.getShapeCenters(shape);
+      const rad = ((shape.angle || 0) * Math.PI) / 180;
 
       // Function to rotate a relative point around the shape center
       const getRotatedCorner = (dx: number, dy: number) => {
@@ -1917,7 +2143,7 @@ export class Game {
         centerY: tl.y,
         radius: radius / this.zoom,
         type: "selector",
-        angle: shape.angle || 0
+        angle: shape.angle || 0,
       });
       // Top-Right handle
       this.shapeSelectors.push({
@@ -1926,7 +2152,7 @@ export class Game {
         centerY: tr.y,
         radius: radius / this.zoom,
         type: "selector",
-        angle: shape.angle || 0
+        angle: shape.angle || 0,
       });
       // Bottom-Right handle
       this.shapeSelectors.push({
@@ -1935,7 +2161,7 @@ export class Game {
         centerY: br.y,
         radius: radius / this.zoom,
         type: "selector",
-        angle: shape.angle || 0
+        angle: shape.angle || 0,
       });
       // Bottom-Left handle
       this.shapeSelectors.push({
@@ -1944,7 +2170,7 @@ export class Game {
         centerY: bl.y,
         radius: radius / this.zoom,
         type: "selector",
-        angle: shape.angle || 0
+        angle: shape.angle || 0,
       });
     } else if (shape.type === "circle") {
       const radius = 6;
@@ -1960,7 +2186,7 @@ export class Game {
       });
     } else if (shape.type === "line") {
       const { centerX, centerY } = this.getShapeCenters(shape);
-      const rad = (shape.angle || 0) * Math.PI / 180;
+      const rad = ((shape.angle || 0) * Math.PI) / 180;
 
       const getRotatedPoint = (dx: number, dy: number) => {
         const x = centerX + dx * Math.cos(rad) - dy * Math.sin(rad);
@@ -1969,8 +2195,14 @@ export class Game {
       };
 
       // Calculate rotated endpoints
-      const startRotated = getRotatedPoint(shape.startX - centerX, shape.startY - centerY);
-      const endRotated = getRotatedPoint(shape.endX - centerX, shape.endY - centerY);
+      const startRotated = getRotatedPoint(
+        shape.startX - centerX,
+        shape.startY - centerY,
+      );
+      const endRotated = getRotatedPoint(
+        shape.endX - centerX,
+        shape.endY - centerY,
+      );
 
       // Rotate logo is drawn 40px above the midpoint
       const logoPos = getRotatedPoint(0, -40);
@@ -2001,7 +2233,7 @@ export class Game {
    * Hit detection engine.
    * Resolves whether the click coordinates (x, y) intersect with a selector handle or any existing shape.
    * Iterates shapes in reverse chronological order (top-most layer first).
-   * 
+   *
    * @param x World coordinate x.
    * @param y World coordinate y.
    * @returns The intersected selector or shape object, or null if nothing was clicked.
@@ -2010,10 +2242,11 @@ export class Game {
     //first check with rotate icon if it is there
     if (this.rotateIconLocation) {
       const dist = Math.sqrt(
-        (x - this.rotateIconLocation.x) ** 2 + (y - this.rotateIconLocation.y) ** 2
+        (x - this.rotateIconLocation.x) ** 2 +
+          (y - this.rotateIconLocation.y) ** 2,
       );
       if (dist <= 10) {
-        console.log("rotate")
+        console.log("rotate");
         return "rotate";
       }
     }
@@ -2023,7 +2256,7 @@ export class Game {
       const selectorId = i + 1;
       const selector = this.shapeSelectors[selectorId - 1];
       const dist = Math.sqrt(
-        (x - selector.centerX) ** 2 + (y - selector.centerY) ** 2
+        (x - selector.centerX) ** 2 + (y - selector.centerY) ** 2,
       );
       if (dist <= selector.radius) {
         return selector;
@@ -2036,7 +2269,7 @@ export class Game {
 
       if (shape.type === "rectangle" || shape.type === "image") {
         const { centerX, centerY } = this.getShapeCenters(shape);
-        const rad = (shape.angle || 0) * Math.PI / 180;
+        const rad = ((shape.angle || 0) * Math.PI) / 180;
 
         // Rotate test point back to unrotated space around center
         const dx = x - centerX;
@@ -2049,20 +2282,25 @@ export class Game {
         const xMax = Math.max(shape.startX, shape.startX + shape.width);
         const yMin = Math.min(shape.startY, shape.startY + shape.height);
         const yMax = Math.max(shape.startY, shape.startY + shape.height);
-        if (unrotatedX >= xMin && unrotatedX <= xMax && unrotatedY >= yMin && unrotatedY <= yMax) {
+        if (
+          unrotatedX >= xMin &&
+          unrotatedX <= xMax &&
+          unrotatedY >= yMin &&
+          unrotatedY <= yMax
+        ) {
           return shape;
         }
       } else if (shape.type === "circle") {
         // Distance check: Point distance from circle origin must be <= radius
         const dist = Math.sqrt(
-          (x - shape.centerX) ** 2 + (y - shape.centerY) ** 2
+          (x - shape.centerX) ** 2 + (y - shape.centerY) ** 2,
         );
         if (dist <= shape.radius) {
           return shape;
         }
       } else if (shape.type === "line") {
         const { centerX, centerY } = this.getShapeCenters(shape);
-        const rad = (shape.angle || 0) * Math.PI / 180;
+        const rad = ((shape.angle || 0) * Math.PI) / 180;
 
         // Rotate test point back to unrotated space around center
         const dx = x - centerX;
@@ -2146,7 +2384,9 @@ export class Game {
 
       // Room role was updated
       if (data.type === "role_updated") {
-        const myUpdate = data.updates.find((u: any) => u.userId === this.myUserId);
+        const myUpdate = data.updates.find(
+          (u: any) => u.userId === this.myUserId,
+        );
         if (myUpdate) {
           const oldRole = this.myRole;
           const newRole = myUpdate.role;
@@ -2159,9 +2399,13 @@ export class Game {
             this.rotateIconLocation = null;
             this.clearCanvas();
             this.triggerSelectionChange();
-            alert("Your role has been updated to Viewer. You can no longer edit this board.");
+            alert(
+              "Your role has been updated to Viewer. You can no longer edit this board.",
+            );
           } else if (oldRole === "Viewer" && newRole !== "Viewer") {
-            alert(`Your role has been updated to ${newRole}. You can now edit the board!`);
+            alert(
+              `Your role has been updated to ${newRole}. You can now edit the board!`,
+            );
           }
         }
       }
@@ -2193,7 +2437,7 @@ export class Game {
             this.undoStack.push({
               type: "create",
               shapeId: shape.id,
-              shape: { ...shape }
+              shape: { ...shape },
             });
             this.redoStack = [];
           }
@@ -2206,9 +2450,7 @@ export class Game {
         if (data.from === this.myUserId) {
           return;
         }
-        const shape = this.existingShapes.find(
-          (s) => s.id === data.shape.id
-        );
+        const shape = this.existingShapes.find((s) => s.id === data.shape.id);
         if (shape) {
           const updatedShape = JSON.parse(data.shape.shape);
           Object.assign(shape, updatedShape);
@@ -2224,7 +2466,9 @@ export class Game {
       if (data.type === "shape_deleted") {
         const shape = this.existingShapes.find((s) => s.id === data.shapeId);
         if (shape) {
-          this.existingShapes = this.existingShapes.filter((s) => s.id !== data.shapeId);
+          this.existingShapes = this.existingShapes.filter(
+            (s) => s.id !== data.shapeId,
+          );
           if (this.selectedShape && this.selectedShape.id === data.shapeId) {
             this.selectedShape = null;
             this.shapeSelectors = [];
@@ -2235,8 +2479,12 @@ export class Game {
         }
 
         if (data.from !== this.myUserId) {
-          this.undoStack = this.undoStack.filter(action => action.shapeId !== data.shapeId);
-          this.redoStack = this.redoStack.filter(action => action.shapeId !== data.shapeId);
+          this.undoStack = this.undoStack.filter(
+            (action) => action.shapeId !== data.shapeId,
+          );
+          this.redoStack = this.redoStack.filter(
+            (action) => action.shapeId !== data.shapeId,
+          );
           this.triggerHistoryChange();
         }
       }
@@ -2260,13 +2508,15 @@ export class Game {
             coords.canvasStartX,
             coords.canvasStartY,
             coords.canvasEndX,
-            coords.canvasEndY
+            coords.canvasEndY,
           );
         }
       }
 
       if (data.type === "get_screen_coordinates_fail") {
-        alert("Could not locate member. They might not be actively panning or are offline.");
+        alert(
+          "Could not locate member. They might not be actively panning or are offline.",
+        );
       }
     };
 
@@ -2277,20 +2527,20 @@ export class Game {
         roomId: this.roomId,
         canvasEndX: window.innerWidth,
         canvasEndY: window.innerHeight,
-      })
+      }),
     );
   };
 
   /**
    * Initializes the whiteboard engine state.
-   * Resolves existing shapes, resizes the canvas window viewport, 
+   * Resolves existing shapes, resizes the canvas window viewport,
    * sets the drawing styles, and sets up window resize listeners.
    */
   init = async () => {
     if (!this.ctx) return;
 
     // Fetch existing shape lists from room database history
-    this.existingShapes = await this.getExistingShapes(this.roomId) || [];
+    this.existingShapes = (await this.getExistingShapes(this.roomId)) || [];
 
     this.updateCanvasSize();
     this.ctx.lineWidth = 2; // Fixed stroke thickness
@@ -2336,19 +2586,19 @@ export class Game {
   initKeyboardHandlers = () => {
     window.addEventListener("keydown", this.keyboardDownHandler);
     window.addEventListener("keyup", this.keyboardUpHandler);
-    window.addEventListener("keydown", this.oneTimeKeyboardPressHandler)
+    window.addEventListener("keydown", this.oneTimeKeyboardPressHandler);
   };
 
   /**
    * Fetches room drawings from the database through REST HTTP calls.
-   * 
+   *
    * @param canvasId The database room target ID.
    * @returns Array of database shape elements or undefined on error.
    */
   getExistingShapes = async (canvasId: string) => {
     try {
       const res = await axios.get(`${BACKEND_URL}/room/shapes/${canvasId}`, {
-        withCredentials: true
+        withCredentials: true,
       });
       const data = res.data.shapes;
       if (Array.isArray(data)) {
@@ -2387,17 +2637,33 @@ export class Game {
       this.tempShapes.forEach((shape) => {
         this.ctx.save();
         if (shape.type === "rectangle") {
-          this.ctx.translate(shape.startX + shape.width / 2, shape.startY + shape.height / 2);
+          this.ctx.translate(
+            shape.startX + shape.width / 2,
+            shape.startY + shape.height / 2,
+          );
           this.ctx.rotate(shape.angle ? shape.angle * (Math.PI / 180) : 0);
-          this.ctx.translate(-shape.startX - shape.width / 2, -shape.startY - shape.height / 2);
+          this.ctx.translate(
+            -shape.startX - shape.width / 2,
+            -shape.startY - shape.height / 2,
+          );
           if (shape.color) {
             this.ctx.strokeStyle = this.getEffectiveColor(shape.color);
           }
           if (shape.bg_color) {
             this.ctx.fillStyle = shape.bg_color;
-            this.ctx.fillRect(shape.startX, shape.startY, shape.width, shape.height);
+            this.ctx.fillRect(
+              shape.startX,
+              shape.startY,
+              shape.width,
+              shape.height,
+            );
           }
-          this.ctx.strokeRect(shape.startX, shape.startY, shape.width, shape.height);
+          this.ctx.strokeRect(
+            shape.startX,
+            shape.startY,
+            shape.width,
+            shape.height,
+          );
         } else if (shape.type === "line") {
           if (shape.color) {
             this.ctx.strokeStyle = this.getEffectiveColor(shape.color);
@@ -2411,7 +2677,13 @@ export class Game {
             this.ctx.strokeStyle = this.getEffectiveColor(shape.color);
           }
           this.ctx.beginPath();
-          this.ctx.arc(shape.centerX, shape.centerY, shape.radius, 0, 2 * Math.PI);
+          this.ctx.arc(
+            shape.centerX,
+            shape.centerY,
+            shape.radius,
+            0,
+            2 * Math.PI,
+          );
           if (shape.bg_color) {
             this.ctx.fillStyle = shape.bg_color;
             this.ctx.fill();
@@ -2421,12 +2693,28 @@ export class Game {
           if (shape.url) {
             const img = this.getImage(shape.url);
             if (img) {
-              this.ctx.drawImage(img, shape.startX, shape.startY, shape.width, shape.height);
+              this.ctx.drawImage(
+                img,
+                shape.startX,
+                shape.startY,
+                shape.width,
+                shape.height,
+              );
             } else {
-              this.ctx.strokeRect(shape.startX, shape.startY, shape.width, shape.height);
+              this.ctx.strokeRect(
+                shape.startX,
+                shape.startY,
+                shape.width,
+                shape.height,
+              );
             }
           } else {
-            this.ctx.strokeRect(shape.startX, shape.startY, shape.width, shape.height);
+            this.ctx.strokeRect(
+              shape.startX,
+              shape.startY,
+              shape.width,
+              shape.height,
+            );
           }
         } else if (shape.type === "text") {
           this.ctx.textBaseline = "top";
@@ -2440,30 +2728,48 @@ export class Game {
     }
 
     if (this.rotateIconLocation && this.rotateImg) {
-      this.ctx.drawImage(this.rotateImg, this.rotateIconLocation.x, this.rotateIconLocation.y, 20, 20);
+      this.ctx.drawImage(
+        this.rotateImg,
+        this.rotateIconLocation.x,
+        this.rotateIconLocation.y,
+        20,
+        20,
+      );
     }
 
     // 3. Render all shapes loaded in memory (or replay shapes if in replay mode)
-    const shapesToDraw = this.replayShapes !== null ? this.replayShapes : this.existingShapes;
+    const shapesToDraw =
+      this.replayShapes !== null ? this.replayShapes : this.existingShapes;
     if (shapesToDraw.length > 0) {
       shapesToDraw.forEach((shape) => {
-        if (shape.id !== undefined && shape.id === this.editingTextShapeId) return;
+        if (shape.id !== undefined && shape.id === this.editingTextShapeId)
+          return;
         this.ctx.save();
         const { centerX, centerY } = this.getShapeCenters(shape);
         if (shape.type === "rectangle") {
           this.ctx.translate(centerX, centerY);
-          this.ctx.rotate((shape.angle || 0) * Math.PI / 180);
+          this.ctx.rotate(((shape.angle || 0) * Math.PI) / 180);
           if (shape.color) {
             this.ctx.strokeStyle = this.getEffectiveColor(shape.color);
           }
           if (shape.bg_color) {
             this.ctx.fillStyle = shape.bg_color;
-            this.ctx.fillRect(-shape.width / 2, -shape.height / 2, shape.width, shape.height);
+            this.ctx.fillRect(
+              -shape.width / 2,
+              -shape.height / 2,
+              shape.width,
+              shape.height,
+            );
           }
-          this.ctx.strokeRect(-shape.width / 2, -shape.height / 2, shape.width, shape.height);
+          this.ctx.strokeRect(
+            -shape.width / 2,
+            -shape.height / 2,
+            shape.width,
+            shape.height,
+          );
         } else if (shape.type === "line") {
           this.ctx.translate(centerX, centerY);
-          this.ctx.rotate((shape.angle || 0) * Math.PI / 180);
+          this.ctx.rotate(((shape.angle || 0) * Math.PI) / 180);
           if (shape.color) {
             this.ctx.strokeStyle = this.getEffectiveColor(shape.color);
           }
@@ -2481,7 +2787,7 @@ export class Game {
             shape.centerY,
             shape.radius,
             0,
-            2 * Math.PI
+            2 * Math.PI,
           );
           if (shape.bg_color) {
             this.ctx.fillStyle = shape.bg_color;
@@ -2489,27 +2795,54 @@ export class Game {
           }
           this.ctx.stroke();
         } else if (shape.type === "image") {
-          const centerX = shape.startX + shape.width / 2
-          const centerY = shape.startY + shape.height / 2
+          const centerX = shape.startX + shape.width / 2;
+          const centerY = shape.startY + shape.height / 2;
 
           this.ctx.translate(centerX, centerY);
-          this.ctx.rotate((shape.angle || 0) * Math.PI / 180);
+          this.ctx.rotate(((shape.angle || 0) * Math.PI) / 180);
 
           if (shape.url) {
             const img = this.getImage(shape.url);
             if (img) {
-              this.ctx.drawImage(img, -shape.width / 2, -shape.height / 2, shape.width, shape.height);
+              this.ctx.drawImage(
+                img,
+                -shape.width / 2,
+                -shape.height / 2,
+                shape.width,
+                shape.height,
+              );
             } else {
               this.ctx.setLineDash([10, 5]);
-              this.ctx.strokeRect(-shape.width / 2, -shape.height / 2, shape.width, shape.height);
+              this.ctx.strokeRect(
+                -shape.width / 2,
+                -shape.height / 2,
+                shape.width,
+                shape.height,
+              );
             }
           } else {
             this.ctx.setLineDash([10, 5]);
-            this.ctx.strokeRect(-shape.width / 2, -shape.height / 2, shape.width, shape.height);
-            this.ctx.strokeRect(-shape.width / 6, -shape.height / 6, shape.width / 3, shape.height / 3);
+            this.ctx.strokeRect(
+              -shape.width / 2,
+              -shape.height / 2,
+              shape.width,
+              shape.height,
+            );
+            this.ctx.strokeRect(
+              -shape.width / 6,
+              -shape.height / 6,
+              shape.width / 3,
+              shape.height / 3,
+            );
             const img = this.getImage("/add-image.png");
             if (img) {
-              this.ctx.drawImage(img, -shape.width / 6, -shape.height / 6, shape.width / 3, shape.height / 3);
+              this.ctx.drawImage(
+                img,
+                -shape.width / 6,
+                -shape.height / 6,
+                shape.width / 3,
+                shape.height / 3,
+              );
             }
           }
         } else if (shape.type === "text") {
@@ -2522,9 +2855,15 @@ export class Game {
       });
 
       // Draw connector line for the rotate handle
-      if (this.rotateIconLocation && this.selectedShape && (this.selectedShape.type === "rectangle" || this.selectedShape.type === "image" || this.selectedShape.type === "line")) {
+      if (
+        this.rotateIconLocation &&
+        this.selectedShape &&
+        (this.selectedShape.type === "rectangle" ||
+          this.selectedShape.type === "image" ||
+          this.selectedShape.type === "line")
+      ) {
         const { centerX, centerY } = this.getShapeCenters(this.selectedShape);
-        const rad = (this.selectedShape.angle || 0) * Math.PI / 180;
+        const rad = ((this.selectedShape.angle || 0) * Math.PI) / 180;
 
         let baseLocalX = 0;
         let baseLocalY = 0;
@@ -2544,11 +2883,15 @@ export class Game {
           logoLocalY = -this.selectedShape.height / 2 - 40;
         }
 
-        const baseWorldX = centerX + baseLocalX * Math.cos(rad) - baseLocalY * Math.sin(rad);
-        const baseWorldY = centerY + baseLocalX * Math.sin(rad) + baseLocalY * Math.cos(rad);
+        const baseWorldX =
+          centerX + baseLocalX * Math.cos(rad) - baseLocalY * Math.sin(rad);
+        const baseWorldY =
+          centerY + baseLocalX * Math.sin(rad) + baseLocalY * Math.cos(rad);
 
-        const logoWorldX = centerX + logoLocalX * Math.cos(rad) - logoLocalY * Math.sin(rad);
-        const logoWorldY = centerY + logoLocalX * Math.sin(rad) + logoLocalY * Math.cos(rad);
+        const logoWorldX =
+          centerX + logoLocalX * Math.cos(rad) - logoLocalY * Math.sin(rad);
+        const logoWorldY =
+          centerY + logoLocalX * Math.sin(rad) + logoLocalY * Math.cos(rad);
 
         this.ctx.save();
         this.ctx.beginPath();
@@ -2571,7 +2914,7 @@ export class Game {
             selector.centerY,
             selector.radius,
             0,
-            2 * Math.PI
+            2 * Math.PI,
           );
           this.ctx.fillStyle = "#ffffff";
           this.ctx.fill();

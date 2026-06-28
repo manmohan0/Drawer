@@ -37,8 +37,10 @@ wss.on("connection", async (ws, req) => {
   const tempMessageQueue: any[] = [];
 
   // Check if token exists in cookies for immediate authentication
-  const cookieToken = req.headers.cookie?.split('Authorization=')[1]?.split(';')[0];
-  
+  const cookieToken = req.headers.cookie
+    ?.split("Authorization=")[1]
+    ?.split(";")[0];
+
   const setupAuthenticatedUser = async (token: string): Promise<boolean> => {
     const userAuthenticated = checkUser(token);
     if (!userAuthenticated || !userAuthenticated.userId) {
@@ -47,7 +49,7 @@ wss.on("connection", async (ws, req) => {
 
     try {
       const dbUser = await prismaClient.user.findUnique({
-        where: { id: userAuthenticated.userId }
+        where: { id: userAuthenticated.userId },
       });
 
       if (!dbUser) {
@@ -105,7 +107,9 @@ wss.on("connection", async (ws, req) => {
     authTimeout = setTimeout(() => {
       if (!isAuthenticated) {
         console.error("Authentication timeout: closing WebSocket connection");
-        ws.send(JSON.stringify({ type: "error", message: "Authentication timeout" }));
+        ws.send(
+          JSON.stringify({ type: "error", message: "Authentication timeout" }),
+        );
         ws.close();
       }
     }, 5000);
@@ -120,7 +124,12 @@ wss.on("connection", async (ws, req) => {
             ws.removeListener("message", handleAuthMessage);
             console.log("Post-handshake message authentication successful");
           } else {
-            ws.send(JSON.stringify({ type: "error", message: "Invalid authorization token" }));
+            ws.send(
+              JSON.stringify({
+                type: "error",
+                message: "Invalid authorization token",
+              }),
+            );
             ws.close();
           }
         } else {
@@ -129,7 +138,9 @@ wss.on("connection", async (ws, req) => {
         }
       } catch (err) {
         console.error("Error parsing pre-authentication message:", err);
-        ws.send(JSON.stringify({ type: "error", message: "Invalid message format" }));
+        ws.send(
+          JSON.stringify({ type: "error", message: "Invalid message format" }),
+        );
         ws.close();
       }
     };
@@ -144,14 +155,19 @@ wss.on("connection", async (ws, req) => {
     if (userIndex !== -1) {
       const user = users[userIndex];
 
-      user?.rooms.forEach(async room => {
-        const roomKey = `room${room}`
-        const member = roomMembers[roomKey]
+      user?.rooms.forEach(async (room) => {
+        const roomKey = `room${room}`;
+        const member = roomMembers[roomKey];
 
         try {
-          await RedisManager.getInstance().getClient().hDel(`room${room}:coordinates`, user.userId)
+          await RedisManager.getInstance()
+            .getClient()
+            .hDel(`room${room}:coordinates`, user.userId);
         } catch (err) {
-          console.error(`Failed to delete coordinates from Redis on close for room ${room}:`, err);
+          console.error(
+            `Failed to delete coordinates from Redis on close for room ${room}:`,
+            err,
+          );
         }
 
         if (member) {
@@ -161,14 +177,13 @@ wss.on("connection", async (ws, req) => {
           }
 
           if (member.length === 0) {
-            delete roomMembers[`room${room}`]
-            RedisManager.getInstance().getSubClient().unsubscribe(roomKey)
-            console.log(`Room ${room} unsubscribed and deleted`) 
+            delete roomMembers[`room${room}`];
+            RedisManager.getInstance().getSubClient().unsubscribe(roomKey);
+            console.log(`Room ${room} unsubscribed and deleted`);
           }
         }
-      })
+      });
       users.splice(userIndex, 1);
     }
-
   });
 });

@@ -29,14 +29,14 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
         const res = await axios.post(
           `${BACKEND_URL}/auth/signIn`,
           { email, password },
-          { withCredentials: true }
+          { withCredentials: true },
         );
-        
+
         // Save the cookie client-side to bypass cross-site third-party cookie restrictions
         if (res.data?.authToken) {
           setCookie("Authorization", res.data.authToken);
         }
-        
+
         setSuccess("Signed in successfully! Redirecting...");
         setTimeout(() => {
           router.push("/rooms");
@@ -45,9 +45,9 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
         await axios.post(
           `${BACKEND_URL}/auth/signUp`,
           { email, password, confirmPassword, firstName, lastName },
-          { withCredentials: true }
+          { withCredentials: true },
         );
-        
+
         setSuccess("Account created successfully! Redirecting to sign in...");
         setTimeout(() => {
           router.push("/signin");
@@ -57,8 +57,8 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
       console.error(err);
       setError(
         err.response?.data?.message ||
-        err.response?.data?.error?.issues?.[0]?.message ||
-        "An unexpected error occurred. Please try again."
+          err.response?.data?.error?.issues?.[0]?.message ||
+          "An unexpected error occurred. Please try again.",
       );
     } finally {
       setLoading(false);
@@ -77,7 +77,9 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
             {isSignIn ? "Welcome Back" : "Create Account"}
           </h1>
           <p className="text-sm text-zinc-400">
-            {isSignIn ? "Sign in to access your canvas and start drawing" : "Get started with collaborative whiteboard drawing"}
+            {isSignIn
+              ? "Sign in to access your canvas and start drawing"
+              : "Get started with collaborative whiteboard drawing"}
           </p>
         </div>
 
@@ -97,7 +99,9 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
           {!isSignIn && (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">First Name</label>
+                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                  First Name
+                </label>
                 <input
                   type="text"
                   required
@@ -108,7 +112,9 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Last Name</label>
+                <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                  Last Name
+                </label>
                 <input
                   type="text"
                   required
@@ -122,7 +128,9 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
           )}
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Email Address</label>
+            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+              Email Address
+            </label>
             <input
               type="email"
               required
@@ -134,7 +142,9 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Password</label>
+            <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+              Password
+            </label>
             <input
               type="password"
               required
@@ -147,7 +157,9 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
 
           {!isSignIn && (
             <div>
-              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Confirm Password</label>
+              <label className="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+                Confirm Password
+              </label>
               <input
                 type="password"
                 required
@@ -166,9 +178,24 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
           >
             {loading ? (
               <span className="flex items-center justify-center">
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                <svg
+                  className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
                 Processing...
               </span>
@@ -184,14 +211,20 @@ export const AuthPage = ({ isSignIn }: { isSignIn: boolean }) => {
           {isSignIn ? (
             <>
               Don't have an account?{" "}
-              <Link href="/signup" className="text-orange-400 hover:underline hover:text-orange-300 transition-colors font-medium">
+              <Link
+                href="/signup"
+                className="text-orange-400 hover:underline hover:text-orange-300 transition-colors font-medium"
+              >
                 Sign up
               </Link>
             </>
           ) : (
             <>
               Already have an account?{" "}
-              <Link href="/signin" className="text-orange-400 hover:underline hover:text-orange-300 transition-colors font-medium">
+              <Link
+                href="/signin"
+                className="text-orange-400 hover:underline hover:text-orange-300 transition-colors font-medium"
+              >
                 Sign in
               </Link>
             </>

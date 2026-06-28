@@ -29,14 +29,16 @@ export const signUp = async (req: Request, res: Response) => {
 
   const hashedPassword = bcryptjs.hashSync(parsedBody.data.password, 12);
 
-  console.log(await prismaClient.user.create({
-    data: {
-      firstName: parsedBody.data.firstName,
-      lastName: parsedBody.data.lastName,
-      email: parsedBody.data.email,
-      password: hashedPassword,
-    },
-  }));
+  console.log(
+    await prismaClient.user.create({
+      data: {
+        firstName: parsedBody.data.firstName,
+        lastName: parsedBody.data.lastName,
+        email: parsedBody.data.email,
+        password: hashedPassword,
+      },
+    }),
+  );
 
   res.status(201).json({ message: "User created successfully" });
 };
@@ -58,7 +60,7 @@ export const signIn = async (req: Request, res: Response) => {
     },
   });
 
-  console.log(await prismaClient.user.findMany())
+  console.log(await prismaClient.user.findMany());
   if (!user) {
     res.status(400).json({ message: "User does not exist" });
     return;
@@ -76,7 +78,9 @@ export const signIn = async (req: Request, res: Response) => {
 
   const authToken = jwt.sign({ userId: user.id }, JWT_SECRET);
 
-  const isProd = process.env.NODE_ENV === "production" || req.headers["x-forwarded-proto"] === "https";
+  const isProd =
+    process.env.NODE_ENV === "production" ||
+    req.headers["x-forwarded-proto"] === "https";
 
   res.cookie("Authorization", authToken, {
     httpOnly: false,

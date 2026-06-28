@@ -5,9 +5,21 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { BACKEND_URL } from "@/config";
 import { getCookie } from "@/utils/cookie";
-import { ArrowLeft, Loader2, Calendar, Shield, Users, Mail, Hash } from "lucide-react";
+import {
+  ArrowLeft,
+  Loader2,
+  Calendar,
+  Shield,
+  Users,
+  Mail,
+  Hash,
+} from "lucide-react";
 
-export default function RoomDetailsPage({ params }: { params: Promise<{ slug: string }> }) {
+export default function RoomDetailsPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
   const { slug } = use(params);
   const router = useRouter();
   const [room, setRoom] = useState<any>(null);
@@ -46,16 +58,19 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
             Authorization: token,
           },
           withCredentials: true,
-        }
+        },
       );
       if (res.data && res.data.success) {
         // Refresh room details to reflect the change
-        const roomRes = await axios.get(`${BACKEND_URL}/room/roomDetails/${slug}`, {
-          headers: {
-            Authorization: token,
+        const roomRes = await axios.get(
+          `${BACKEND_URL}/room/roomDetails/${slug}`,
+          {
+            headers: {
+              Authorization: token,
+            },
+            withCredentials: true,
           },
-          withCredentials: true,
-        });
+        );
         if (roomRes.data && roomRes.data.room) {
           setRoom(roomRes.data.room);
         }
@@ -104,7 +119,9 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
     return (
       <div className="min-h-screen w-screen flex flex-col items-center justify-center bg-zinc-950 text-white">
         <Loader2 className="w-10 h-10 animate-spin text-orange-500 mb-4" />
-        <p className="text-zinc-400 text-sm animate-pulse">Loading room details...</p>
+        <p className="text-zinc-400 text-sm animate-pulse">
+          Loading room details...
+        </p>
       </div>
     );
   }
@@ -113,7 +130,9 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
     return (
       <div className="min-h-screen w-screen flex flex-col items-center justify-center bg-zinc-950 text-white p-6">
         <div className="bg-zinc-900/50 border border-zinc-800 rounded-3xl p-8 max-w-md w-full text-center space-y-4 shadow-xl">
-          <p className="text-red-400 text-sm">{error || "Room details not found."}</p>
+          <p className="text-red-400 text-sm">
+            {error || "Room details not found."}
+          </p>
           <button
             onClick={() => router.back()}
             className="w-full bg-zinc-850 hover:bg-zinc-800 border border-zinc-805 px-4 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all active:scale-[0.98]"
@@ -128,7 +147,6 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
   return (
     <div className="min-h-screen w-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white p-6 md:p-8 font-sans">
       <div className="mx-auto space-y-8">
-
         {/* Header Navigation */}
         <div className="flex items-center space-x-3 pb-6 border-b border-zinc-800/80">
           <button
@@ -141,7 +159,9 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-orange-400 to-amber-500 bg-clip-text text-transparent">
               Room Details
             </h1>
-            <p className="text-xs text-zinc-500">View room properties and member roles</p>
+            <p className="text-xs text-zinc-500">
+              View room properties and member roles
+            </p>
           </div>
         </div>
 
@@ -152,8 +172,12 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
               <Hash className="w-5 h-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Room Code</span>
-              <span className="text-xl font-bold font-mono text-zinc-200 mt-0.5 block truncate">{room.slug}</span>
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                Room Code
+              </span>
+              <span className="text-xl font-bold font-mono text-zinc-200 mt-0.5 block truncate">
+                {room.slug}
+              </span>
             </div>
           </div>
 
@@ -162,9 +186,20 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
               <Shield className="w-5 h-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Owner</span>
-              <span className="text-base font-bold text-zinc-200 mt-0.5 block truncate" title={room.admin ? `${room.admin.firstName} ${room.admin.lastName}` : "No Owner"}>
-                {room.admin ? `${room.admin.firstName} ${room.admin.lastName}` : "No Owner"}
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                Owner
+              </span>
+              <span
+                className="text-base font-bold text-zinc-200 mt-0.5 block truncate"
+                title={
+                  room.admin
+                    ? `${room.admin.firstName} ${room.admin.lastName}`
+                    : "No Owner"
+                }
+              >
+                {room.admin
+                  ? `${room.admin.firstName} ${room.admin.lastName}`
+                  : "No Owner"}
               </span>
             </div>
           </div>
@@ -174,7 +209,9 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
               <Calendar className="w-5 h-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Created On</span>
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                Created On
+              </span>
               <span className="text-base font-bold text-zinc-200 mt-0.5 block truncate">
                 {new Date(room.createdAt).toLocaleDateString(undefined, {
                   month: "short",
@@ -190,8 +227,12 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
               <Users className="w-5 h-5" />
             </div>
             <div className="min-w-0 flex-1">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">Total Members</span>
-              <span className="text-xl font-bold text-zinc-200 mt-0.5 block truncate">{getMembersList().length}</span>
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">
+                Total Members
+              </span>
+              <span className="text-xl font-bold text-zinc-200 mt-0.5 block truncate">
+                {getMembersList().length}
+              </span>
             </div>
           </div>
         </div>
@@ -218,7 +259,8 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
               </thead>
               <tbody className="divide-y divide-zinc-850/60">
                 {getMembersList().map((member: any) => {
-                  const initials = `${member.firstName?.[0] || ""}${member.lastName?.[0] || ""}`.toUpperCase();
+                  const initials =
+                    `${member.firstName?.[0] || ""}${member.lastName?.[0] || ""}`.toUpperCase();
                   const roleStyle =
                     member.role === "Owner"
                       ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
@@ -227,7 +269,10 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
                         : "bg-zinc-800 text-zinc-400 border-zinc-700/60";
 
                   return (
-                    <tr key={member.userId} className="group hover:bg-zinc-900/20 transition-all duration-150">
+                    <tr
+                      key={member.userId}
+                      className="group hover:bg-zinc-900/20 transition-all duration-150"
+                    >
                       <td className="py-4 px-4">
                         <div className="flex items-center space-x-3">
                           <div className="w-9 h-9 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold shadow-inner">
@@ -246,7 +291,9 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
                       </td>
                       <td className="py-4 px-4">
                         {member.userId === currentUserId ? (
-                          <span className={`inline-flex px-3.5 py-1.5 text-[10px] font-bold rounded-lg border uppercase tracking-wider shadow-sm ${roleStyle}`}>
+                          <span
+                            className={`inline-flex px-3.5 py-1.5 text-[10px] font-bold rounded-lg border uppercase tracking-wider shadow-sm ${roleStyle}`}
+                          >
                             {member.role}
                           </span>
                         ) : updatingUserId === member.userId ? (
@@ -257,7 +304,9 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
                         ) : (
                           <select
                             value={member.role}
-                            onChange={(e) => handleRoleChange(member.userId, e.target.value)}
+                            onChange={(e) =>
+                              handleRoleChange(member.userId, e.target.value)
+                            }
                             className={`px-3 py-1.5 text-[10px] font-bold rounded-lg border uppercase tracking-wider shadow-sm bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700 focus:outline-none focus:ring-1 focus:ring-orange-500/50 cursor-pointer transition-colors ${
                               member.role === "Owner"
                                 ? "text-amber-400 border-amber-500/20 bg-amber-500/5"
@@ -273,11 +322,14 @@ export default function RoomDetailsPage({ params }: { params: Promise<{ slug: st
                         )}
                       </td>
                       <td className="py-4 px-4 text-zinc-500 text-xs text-right font-mono">
-                        {new Date(member.joinedAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
+                        {new Date(member.joinedAt).toLocaleDateString(
+                          undefined,
+                          {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          },
+                        )}
                       </td>
                     </tr>
                   );

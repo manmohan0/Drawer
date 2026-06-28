@@ -5,11 +5,15 @@ import { use } from "react";
 
 const RoomCanvas = dynamic(
   () => import("@/components/RoomCanvas").then((mod) => mod.RoomCanvas),
-  { ssr: false }
+  { ssr: false },
 );
 
-export default function Canvas({ params } : { params: Promise<{ roomId: string }> }) {
-    const { roomId } = use(params);
+export default function Canvas({
+  params,
+}: {
+  params: Promise<{ roomId: string }>;
+}) {
+  const { roomId } = use(params);
 
-    return <RoomCanvas roomId={roomId}/>
+  return <RoomCanvas roomId={roomId} />;
 }

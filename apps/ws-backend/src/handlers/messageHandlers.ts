@@ -3,9 +3,13 @@ import { prismaClient } from "@repo/db/db";
 import { roomMembers, users } from "../utils/inMemory.js";
 import { RedisManager } from "../config/RedisManager.js";
 import { appendRoomEvent } from "../utils/eventLogger.js";
-import { EventType } from "@repo/common/enum"
+import { EventType } from "@repo/common/enum";
 
-export const selfMessageHandler = async (message: any, ws: WebSocket, userId: string) => {
+export const selfMessageHandler = async (
+  message: any,
+  ws: WebSocket,
+  userId: string,
+) => {
   const userAuthenticated = { userId };
   const data = JSON.parse(message.toString());
 
@@ -14,7 +18,7 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
 
     if (!user) {
       ws.send(JSON.stringify({ type: "join_room_failder" }));
-      return
+      return;
     }
 
     if (user && !user.rooms.includes(data.roomId)) {
@@ -28,8 +32,8 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
         const dbRoomUser = await prismaClient.roomUser.findFirst({
           where: {
             room: { slug: slugNum },
-            userId: userId
-          }
+            userId: userId,
+          },
         });
         if (dbRoomUser && user) {
           if (!user.roles) user.roles = {};
@@ -45,42 +49,52 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       members = [];
       roomMembers[`room${data.roomId}`] = members;
       console.log("Subscribing to Redis channel for room:", data.roomId);
-      RedisManager.getInstance().getSubClient().subscribe(`room${data.roomId}`, (redisMessage) => {
-        console.log("Redis broadcast to room:", data.roomId);
-        try {
-          const parsed = JSON.parse(redisMessage);
-          if (parsed.type === "role_updated") {
-            // Update in-memory cached roles
-            parsed.updates.forEach((up: any) => {
-              const targetUser = users.find((u) => u.userId === up.userId);
+      RedisManager.getInstance()
+        .getSubClient()
+        .subscribe(`room${data.roomId}`, (redisMessage) => {
+          console.log("Redis broadcast to room:", data.roomId);
+          try {
+            const parsed = JSON.parse(redisMessage);
+            if (parsed.type === "role_updated") {
+              // Update in-memory cached roles
+              parsed.updates.forEach((up: any) => {
+                const targetUser = users.find((u) => u.userId === up.userId);
+                if (targetUser) {
+                  if (!targetUser.roles) targetUser.roles = {};
+                  targetUser.roles[parsed.roomId] = up.role;
+                }
+              });
+            } else if (parsed.type === "user_removed") {
+              const targetUser = users.find((u) => u.userId === parsed.userId);
               if (targetUser) {
-                if (!targetUser.roles) targetUser.roles = {};
-                targetUser.roles[parsed.roomId] = up.role;
+                targetUser.ws.send(
+                  JSON.stringify({ type: "kicked", roomId: parsed.roomId }),
+                );
+                targetUser.ws.close();
               }
-            });
-          } else if (parsed.type === "user_removed") {
-            const targetUser = users.find((u) => u.userId === parsed.userId);
-            if (targetUser) {
-              targetUser.ws.send(JSON.stringify({ type: "kicked", roomId: parsed.roomId }));
-              targetUser.ws.close();
             }
+          } catch (e) {
+            console.error(
+              "Failed to process Redis message in subscription:",
+              e,
+            );
           }
-        } catch (e) {
-          console.error("Failed to process Redis message in subscription:", e);
-        }
 
-        const activeMembers = roomMembers[`room${data.roomId}`];
-        activeMembers?.forEach((socket) => {
-          socket.send(redisMessage);
+          const activeMembers = roomMembers[`room${data.roomId}`];
+          activeMembers?.forEach((socket) => {
+            socket.send(redisMessage);
+          });
         });
-      });
     }
 
     if (!members.includes(ws)) {
       members.push(ws);
     }
 
-    const curRoomUsers: Record<string, { firstName: string; lastName: string }> = {};
+    const curRoomUsers: Record<
+      string,
+      { firstName: string; lastName: string }
+    > = {};
 
     try {
       const slugNum = Number(data.roomId);
@@ -116,16 +130,24 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
           };
         });
     }
-    
+
     const payload = {
       canvasStartX: data.canvasStartX ?? 0,
       canvasStartY: data.canvasStartY ?? 0,
       canvasEndX: data.canvasEndX ?? -1,
-      canvasEndY: data.canvasEndY ?? -1
-    }
+      canvasEndY: data.canvasEndY ?? -1,
+    };
 
-    RedisManager.getInstance().getClient().hSet(`room${data.roomId}:coordinates`, user.userId, JSON.stringify(payload))
-      .catch((err) => console.error("Failed to set coordinates in Redis on join:", err));
+    RedisManager.getInstance()
+      .getClient()
+      .hSet(
+        `room${data.roomId}:coordinates`,
+        user.userId,
+        JSON.stringify(payload),
+      )
+      .catch((err) =>
+        console.error("Failed to set coordinates in Redis on join:", err),
+      );
     // Send joined_room confirmation only to the joining user
     ws.send(
       JSON.stringify({
@@ -133,7 +155,7 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
         room: data.roomId,
         curRoomUsers,
         myUserId: userId,
-      })
+      }),
     );
   } else if (data.type === "leave_room") {
     const user = users.find((u) => u.ws === ws);
@@ -147,18 +169,24 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
         }
         if (members.length === 0) {
           delete roomMembers[`room${roomId}`];
-          RedisManager.getInstance().getSubClient().unsubscribe(`room${roomId}`);
+          RedisManager.getInstance()
+            .getSubClient()
+            .unsubscribe(`room${roomId}`);
           console.log(`Unsubscribed and deleted empty room: ${roomId}`);
         }
       }
       user.rooms = user.rooms.filter((r) => r !== roomId);
-      RedisManager.getInstance().getClient().hDel(`room${roomId}:coordinates`, user.userId).catch((err) => {
-        console.error("Failed to delete coordinates in Redis on leave_room:", err);
-      });
+      RedisManager.getInstance()
+        .getClient()
+        .hDel(`room${roomId}:coordinates`, user.userId)
+        .catch((err) => {
+          console.error(
+            "Failed to delete coordinates in Redis on leave_room:",
+            err,
+          );
+        });
     }
     ws.send(JSON.stringify({ type: "left_room", room: roomId }));
-
-
   } else if (data.type === "chat") {
     const user = users.find((u) => u.ws === ws);
     if (user?.roles?.[data.roomId] === "Viewer") {
@@ -167,7 +195,7 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
     }
     try {
       const room = await prismaClient.room.findUnique({
-        where: { slug: Number(data.roomId) }
+        where: { slug: Number(data.roomId) },
       });
 
       if (!room) {
@@ -180,15 +208,16 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
           roomId: room.id,
           shape: data.shape,
           createdByUserId: userAuthenticated.userId,
-          updatedByUserId: userAuthenticated.userId
+          updatedByUserId: userAuthenticated.userId,
         },
       });
 
       if (shape) {
         const shapeData = JSON.parse(data.shape);
-        const description = shapeData.type === "text"
-          ? `${user?.firstName} ${user?.lastName} created text "${shapeData.text || ""}"`
-          : `${user?.firstName} ${user?.lastName} created a ${shapeData.type}`;
+        const description =
+          shapeData.type === "text"
+            ? `${user?.firstName} ${user?.lastName} created text "${shapeData.text || ""}"`
+            : `${user?.firstName} ${user?.lastName} created a ${shapeData.type}`;
 
         await appendRoomEvent({
           roomId: room.id,
@@ -196,7 +225,7 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
           description: description,
           shapeId: shape.id,
           eventType: data.eventType || EventType.CREATE_SHAPE,
-          payload: data.shape
+          payload: data.shape,
         });
       }
 
@@ -213,7 +242,9 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
         userId: userAuthenticated.userId,
       };
 
-      RedisManager.getInstance().getClient().publish(`room${data.roomId}`, JSON.stringify(payload));
+      RedisManager.getInstance()
+        .getClient()
+        .publish(`room${data.roomId}`, JSON.stringify(payload));
     } catch (e) {
       console.error("Failed to create shape:", e);
     }
@@ -225,7 +256,7 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
     }
     try {
       const room = await prismaClient.room.findUnique({
-        where: { slug: Number(data.roomId) }
+        where: { slug: Number(data.roomId) },
       });
 
       if (!room) {
@@ -238,12 +269,12 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
           prismaClient.shapes.create({
             data: {
               roomId: room.id,
-              shape: typeof s === 'string' ? s : JSON.stringify(s),
+              shape: typeof s === "string" ? s : JSON.stringify(s),
               createdByUserId: userAuthenticated.userId,
-              updatedByUserId: userAuthenticated.userId
-            }
-          })
-        )
+              updatedByUserId: userAuthenticated.userId,
+            },
+          }),
+        ),
       );
 
       shapes.forEach((createdShape) => {
@@ -260,7 +291,9 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
           userId: userAuthenticated.userId,
         };
 
-        RedisManager.getInstance().getClient().publish(`room${data.roomId}`, JSON.stringify(payload));
+        RedisManager.getInstance()
+          .getClient()
+          .publish(`room${data.roomId}`, JSON.stringify(payload));
       });
     } catch (e) {
       console.error("Failed to create shapes:", e);
@@ -273,7 +306,7 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
     }
     try {
       const room = await prismaClient.room.findUnique({
-        where: { slug: Number(data.roomId) }
+        where: { slug: Number(data.roomId) },
       });
 
       if (!room) {
@@ -292,7 +325,9 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
         from: userAuthenticated.userId,
       };
 
-      RedisManager.getInstance().getClient().publish(`room${data.roomId}`, JSON.stringify(payload));
+      RedisManager.getInstance()
+        .getClient()
+        .publish(`room${data.roomId}`, JSON.stringify(payload));
     } catch (e) {
       console.error("Internal server error during clear: ", e);
     }
@@ -308,7 +343,7 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
 
     try {
       const existingShapeRecord = await prismaClient.shapes.findUnique({
-        where: { id: shapeId }
+        where: { id: shapeId },
       });
 
       if (!existingShapeRecord) {
@@ -317,26 +352,27 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       }
 
       const existingShape = JSON.parse(existingShapeRecord.shape);
-      const incomingShape = typeof data.shape === "string" ? JSON.parse(data.shape) : data.shape;
+      const incomingShape =
+        typeof data.shape === "string" ? JSON.parse(data.shape) : data.shape;
 
       const mergedShape = {
         ...existingShape,
-        ...incomingShape
+        ...incomingShape,
       };
 
       const updatedShape = await prismaClient.shapes.update({
         where: { id: shapeId },
         data: {
           shape: JSON.stringify(mergedShape),
-          updatedByUserId: userAuthenticated.userId
+          updatedByUserId: userAuthenticated.userId,
         },
       });
 
       const room = await prismaClient.room.findUnique({
         where: {
-          slug: Number(roomId)
-        }
-      })
+          slug: Number(roomId),
+        },
+      });
 
       if (!room) {
         ws.send(JSON.stringify({ message: "room not found" }));
@@ -346,36 +382,51 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       if (updatedShape && data.eventType) {
         let description;
         const shape = JSON.parse(updatedShape.shape);
-        console.log(data)
+        console.log(data);
         switch (data.eventType) {
           case EventType.ROTATE_SHAPE:
-            description = `${user?.firstName} ${user?.lastName} rotated a ${shape.type} from ${Math.round(data.fromAngle)} to ${Math.round(data.toAngle)} degrees of #${shape.shapeId}`
+            description = `${user?.firstName} ${user?.lastName} rotated a ${shape.type} from ${Math.round(data.fromAngle)} to ${Math.round(data.toAngle)} degrees of #${shape.shapeId}`;
             break;
           case EventType.MOVE_SHAPE:
-            description = shape.type === "line" ? `${user?.firstName} ${user?.lastName} moved a ${shape.type} from start(${Math.round(data.fromStartX)}, ${Math.round(data.fromStartY)}), end(${Math.round(data.fromEndX)}, ${Math.round(data.fromEndY)}) to start(${Math.round(data.toStartX)}, ${Math.round(data.toStartY)}), end(${Math.round(data.toEndX)}, ${Math.round(data.toEndY)}) of #${shape.shapeId}` : `${user?.firstName} ${user?.lastName} moved a ${shape.type} from (${data.fromX}, ${data.fromY}) to (${data.toX}, ${data.toY}) of #${shape.shapeId}`
+            description =
+              shape.type === "line"
+                ? `${user?.firstName} ${user?.lastName} moved a ${shape.type} from start(${Math.round(data.fromStartX)}, ${Math.round(data.fromStartY)}), end(${Math.round(data.fromEndX)}, ${Math.round(data.fromEndY)}) to start(${Math.round(data.toStartX)}, ${Math.round(data.toStartY)}), end(${Math.round(data.toEndX)}, ${Math.round(data.toEndY)}) of #${shape.shapeId}`
+                : `${user?.firstName} ${user?.lastName} moved a ${shape.type} from (${data.fromX}, ${data.fromY}) to (${data.toX}, ${data.toY}) of #${shape.shapeId}`;
             break;
           case EventType.SCALE_SHAPE:
-            description = shape.type !== "circle" && shape.type !== "line" ? `${user?.firstName} ${user?.lastName} resized a ${shape.type} from (${Math.round(data.fromWidth)}, ${Math.round(data.fromHeight)}) to (${Math.round(data.toWidth)}, ${Math.round(data.toHeight)}) of #${shape.shapeId}` : shape.type === "line" ? `${user?.firstName} ${user?.lastName} resized a line from (${Math.round(data.fromStartX)}, ${Math.round(data.fromStartY)}) to (${Math.round(data.toEndX)}, ${Math.round(data.toEndY)}) of #${shape.shapeId}` : `${user?.firstName} ${user?.lastName} resized a ${shape.type} from radius ${Math.round(data.fromRadius)} to ${Math.round(data.toRadius)} of #${shape.shapeId}`
+            description =
+              shape.type !== "circle" && shape.type !== "line"
+                ? `${user?.firstName} ${user?.lastName} resized a ${shape.type} from (${Math.round(data.fromWidth)}, ${Math.round(data.fromHeight)}) to (${Math.round(data.toWidth)}, ${Math.round(data.toHeight)}) of #${shape.shapeId}`
+                : shape.type === "line"
+                  ? `${user?.firstName} ${user?.lastName} resized a line from (${Math.round(data.fromStartX)}, ${Math.round(data.fromStartY)}) to (${Math.round(data.toEndX)}, ${Math.round(data.toEndY)}) of #${shape.shapeId}`
+                  : `${user?.firstName} ${user?.lastName} resized a ${shape.type} from radius ${Math.round(data.fromRadius)} to ${Math.round(data.toRadius)} of #${shape.shapeId}`;
             break;
           case EventType.CHANGE_FILL:
-            description = `${user?.firstName} ${user?.lastName} changed the fill color of a ${shape.type} from ${data.fromColor} to ${data.toColor} of #${shape.shapeId}`
+            description = `${user?.firstName} ${user?.lastName} changed the fill color of a ${shape.type} from ${data.fromColor} to ${data.toColor} of #${shape.shapeId}`;
             break;
           case EventType.CHANGE_STROKE:
-            description = `${user?.firstName} ${user?.lastName} changed the ${shape.type === "text" ? "text" : "border"} color of a ${shape.type} from ${data.fromColor} to ${data.toColor} of #${shape.shapeId}`
+            description = `${user?.firstName} ${user?.lastName} changed the ${shape.type === "text" ? "text" : "border"} color of a ${shape.type} from ${data.fromColor} to ${data.toColor} of #${shape.shapeId}`;
             break;
           case EventType.CHANGE_LAYER:
-            description = `${user?.firstName} ${user?.lastName} changed the layer of a ${shape.type} from z-index ${Math.round(data.fromZ)} to ${Math.round(data.toZ)} of #${shape.shapeId}`
+            description = `${user?.firstName} ${user?.lastName} changed the layer of a ${shape.type} from z-index ${Math.round(data.fromZ)} to ${Math.round(data.toZ)} of #${shape.shapeId}`;
             break;
           case EventType.CHANGE_TEXT:
-            description = `${user?.firstName} ${user?.lastName} updated text from "${data.fromText}" to "${data.toText}" of #${shape.shapeId}`
+            description = `${user?.firstName} ${user?.lastName} updated text from "${data.fromText}" to "${data.toText}" of #${shape.shapeId}`;
             break;
           case EventType.ADD_IMAGE:
-            description = `${user?.firstName} ${user?.lastName} added an image of #${shape.shapeId}`
+            description = `${user?.firstName} ${user?.lastName} added an image of #${shape.shapeId}`;
             break;
           default:
             break;
         }
-        await appendRoomEvent({ roomId: room.id, userId: userAuthenticated.userId, description: description, shapeId: updatedShape.id, eventType: data.eventType, payload: data.shape })
+        await appendRoomEvent({
+          roomId: room.id,
+          userId: userAuthenticated.userId,
+          description: description,
+          shapeId: updatedShape.id,
+          eventType: data.eventType,
+          payload: data.shape,
+        });
       }
 
       const payload = {
@@ -384,7 +435,9 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
         from: userAuthenticated.userId,
       };
 
-      RedisManager.getInstance().getClient().publish(`room${roomId}`, JSON.stringify(payload));
+      RedisManager.getInstance()
+        .getClient()
+        .publish(`room${roomId}`, JSON.stringify(payload));
     } catch (e) {
       console.error("Failed to update shape:", e);
     }
@@ -404,17 +457,24 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       });
 
       if (deletedShape) {
-        const description = `${user?.firstName} ${user?.lastName} deleted a ${JSON.parse(deletedShape.shape).type}`
+        const description = `${user?.firstName} ${user?.lastName} deleted a ${JSON.parse(deletedShape.shape).type}`;
         const room = await prismaClient.room.findUnique({
           where: {
-            id: deletedShape.roomId
-          }
-        })
+            id: deletedShape.roomId,
+          },
+        });
         if (!room) {
           ws.send(JSON.stringify({ message: "room not found" }));
           return;
         }
-        await appendRoomEvent({ roomId: room.id, userId: userAuthenticated.userId, description: description, shapeId: deletedShape.id, eventType: EventType.DELETE_SHAPE, payload: deletedShape.shape })
+        await appendRoomEvent({
+          roomId: room.id,
+          userId: userAuthenticated.userId,
+          description: description,
+          shapeId: deletedShape.id,
+          eventType: EventType.DELETE_SHAPE,
+          payload: deletedShape.shape,
+        });
       }
 
       const payload = {
@@ -423,15 +483,17 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
         from: userAuthenticated.userId,
       };
 
-      RedisManager.getInstance().getClient().publish(`room${roomId}`, JSON.stringify(payload));
+      RedisManager.getInstance()
+        .getClient()
+        .publish(`room${roomId}`, JSON.stringify(payload));
     } catch (e) {
       console.error("Failed to delete the shape:", e);
     }
   } else if (data.type === "change_screen_coordinates") {
-    const user = users.find(u => u.ws === ws);
+    const user = users.find((u) => u.ws === ws);
 
     if (!user) {
-      ws.send(JSON.stringify({}))
+      ws.send(JSON.stringify({}));
       return;
     }
 
@@ -441,18 +503,27 @@ export const selfMessageHandler = async (message: any, ws: WebSocket, userId: st
       canvasStartX: data.canvasStartX,
       canvasStartY: data.canvasStartY,
       canvasEndX: data.canvasEndX,
-      canvasEndY: data.canvasEndY
-    }
+      canvasEndY: data.canvasEndY,
+    };
 
-    RedisManager.getInstance().getClient().hSet(`room${roomId}:coordinates`, user.userId, JSON.stringify(payload));
+    RedisManager.getInstance()
+      .getClient()
+      .hSet(`room${roomId}:coordinates`, user.userId, JSON.stringify(payload));
   } else if (data.type === "get_screen_coordinates") {
     const roomId = data.roomId;
-    const userCoordinates = await RedisManager.getInstance().getClient().hGet(`room${roomId}:coordinates`, data.userId);
+    const userCoordinates = await RedisManager.getInstance()
+      .getClient()
+      .hGet(`room${roomId}:coordinates`, data.userId);
     if (!userCoordinates) {
       ws.send(JSON.stringify({ type: "get_screen_coordinates_fail" }));
       return;
     }
-    ws.send(JSON.stringify({ type: "coordinates_received", coordinates: JSON.parse(userCoordinates) }));
+    ws.send(
+      JSON.stringify({
+        type: "coordinates_received",
+        coordinates: JSON.parse(userCoordinates),
+      }),
+    );
   } else {
     console.warn("Unknown event type received:", data.type);
   }

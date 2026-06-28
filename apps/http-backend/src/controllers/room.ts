@@ -72,13 +72,15 @@ export const createRoom = async (req: Request, res: Response) => {
           create: {
             userId: req.userId as string,
             role: "Owner",
-          }
-        }
+          },
+        },
       },
     });
-    res.status(201).json({ message: "Room created successfully", roomId: newRoom.id });
+    res
+      .status(201)
+      .json({ message: "Room created successfully", roomId: newRoom.id });
   } catch (e) {
-    console.log(e)
+    console.log(e);
     res.status(411).json({ message: "Room with that slug already exists" });
     return;
   }
@@ -116,7 +118,12 @@ export const joinRoom = async (req: Request, res: Response) => {
     }
 
     if (room.roomUsers.length > 0) {
-      res.status(200).json({ success: true, message: "User already in room", roomId: room.id, slug: room.slug });
+      res.status(200).json({
+        success: true,
+        message: "User already in room",
+        roomId: room.id,
+        slug: room.slug,
+      });
       return;
     }
 
@@ -127,7 +134,11 @@ export const joinRoom = async (req: Request, res: Response) => {
         role: "Editor",
       },
     });
-    res.status(200).json({ success: true, message: "Joined room successfully", slug: room.slug });
+    res.status(200).json({
+      success: true,
+      message: "Joined room successfully",
+      slug: room.slug,
+    });
   } catch (e) {
     console.error("Failed to join room:", e);
     res.status(500).json({ success: false, message: "Failed to join room" });
@@ -180,13 +191,20 @@ export const getChatsBySlug = async (req: Request, res: Response) => {
       return;
     }
 
-    const myRole = room.roomUsers.find((ru: any) => ru.userId === req.userId)?.role;
+    const myRole = room.roomUsers.find(
+      (ru: any) => ru.userId === req.userId,
+    )?.role;
 
     if (!myRole) {
-      return res.status(403).json({ success: false, message: "You cannot join the room because role not found" });
+      return res.status(403).json({
+        success: false,
+        message: "You cannot join the room because role not found",
+      });
     }
 
-    const owners = room.roomUsers.filter((ru: any) => ru.role === "Owner").map((ru: any) => ru.user)[0];
+    const owners = room.roomUsers
+      .filter((ru: any) => ru.role === "Owner")
+      .map((ru: any) => ru.user)[0];
     const mappedRoom = {
       id: room.id,
       slug: room.slug,
@@ -206,7 +224,7 @@ export const getExistingShapesById = async (req: Request, res: Response) => {
 
   try {
     const room = await prismaClient.room.findUnique({
-      where: { slug: Number(roomId) }
+      where: { slug: Number(roomId) },
     });
 
     if (!room) {
@@ -216,28 +234,28 @@ export const getExistingShapesById = async (req: Request, res: Response) => {
 
     const shapes = await prismaClient.shapes.findMany({
       where: {
-        roomId: room.id
-      }
-    })
+        roomId: room.id,
+      },
+    });
 
     const correctShapes = shapes.map((shape: any) => {
       const curShape = {
         id: shape.id,
         userId: shape.createdByUserId,
         updatedByUserId: shape.updatedByUserId,
-        ...JSON.parse(shape.shape)
-      }
+        ...JSON.parse(shape.shape),
+      };
       return curShape;
     });
 
     return res.status(200).json({
       message: shapes.length > 0 ? "Shapes found" : "No shaped found",
-      shapes: correctShapes
-    })
+      shapes: correctShapes,
+    });
   } catch (e) {
     res.json({
-      message: "DB error"
-    })
+      message: "DB error",
+    });
   }
 };
 
@@ -289,7 +307,9 @@ export const getRoomMembersAndData = async (req: Request, res: Response) => {
       })),
     };
 
-    res.status(200).json({ success: true, room: mappedRoom, currentUserId: req.userId });
+    res
+      .status(200)
+      .json({ success: true, room: mappedRoom, currentUserId: req.userId });
   } catch (e) {
     res.status(500).json({ message: "Failed to retrieve room" });
   }
@@ -302,47 +322,59 @@ export const updateRole = async (req: Request, res: Response) => {
     const myUserId = req.userId;
 
     if (userId === myUserId) {
-      return res.status(403).json({ success: false, message: "You cannot update your own role" })
+      return res
+        .status(403)
+        .json({ success: false, message: "You cannot update your own role" });
     }
 
     const room = await prismaClient.room.findUnique({
       where: {
-        slug: Number(slug)
-      }
+        slug: Number(slug),
+      },
     });
 
     if (!room) {
-      return res.status(404).json({ success: false, message: "Room not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Room not found" });
     }
 
     const myRoomUser = await prismaClient.roomUser.findUnique({
       where: {
         roomId_userId: {
           roomId: room.id,
-          userId: myUserId as string
-        }
-      }
+          userId: myUserId as string,
+        },
+      },
     });
 
     if (!myRoomUser) {
-      return res.status(403).json({ success: false, message: "You aren't member of this room" });
+      return res
+        .status(403)
+        .json({ success: false, message: "You aren't member of this room" });
     }
 
     const roomUser = await prismaClient.roomUser.findUnique({
       where: {
         roomId_userId: {
           roomId: room.id,
-          userId: userId
-        }
-      }
+          userId: userId,
+        },
+      },
     });
 
     if (!roomUser) {
-      return res.status(404).json({ success: false, message: "User does not exist or isn't member of this room" });
+      return res.status(404).json({
+        success: false,
+        message: "User does not exist or isn't member of this room",
+      });
     }
 
     if (roomUser.role === role) {
-      return res.status(403).json({ success: false, message: "Updated role should be different than current" });
+      return res.status(403).json({
+        success: false,
+        message: "Updated role should be different than current",
+      });
     }
 
     const myRole = roles[myRoomUser.role];
@@ -350,11 +382,21 @@ export const updateRole = async (req: Request, res: Response) => {
     const userRoleValue = roles[roomUser.role];
 
     if ((myRole as number) <= (userRoleValue as number)) {
-      return res.status(403).json({ success: false, message: "You don't have permission to update role" });
+      return res.status(403).json({
+        success: false,
+        message: "You don't have permission to update role",
+      });
     }
 
-    if ((myRole as number) < (roleValue as number) || (myRoomUser.role !== "Owner" && (myRole as number) <= (roleValue as number))) {
-      return res.status(403).json({ success: false, message: "You can't update role to higher than or equal to yours" });
+    if (
+      (myRole as number) < (roleValue as number) ||
+      (myRoomUser.role !== "Owner" &&
+        (myRole as number) <= (roleValue as number))
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can't update role to higher than or equal to yours",
+      });
     }
 
     if (role === "Owner") {
@@ -363,37 +405,37 @@ export const updateRole = async (req: Request, res: Response) => {
           where: {
             roomId_userId: {
               roomId: room.id,
-              userId: myUserId as string
-            }
+              userId: myUserId as string,
+            },
           },
           data: {
-            role: "Editor"
-          }
+            role: "Editor",
+          },
         }),
         prismaClient.roomUser.update({
           where: {
             roomId_userId: {
               roomId: room.id,
-              userId: userId
-            }
+              userId: userId,
+            },
           },
           data: {
-            role: "Owner"
-          }
-        })
-      ])
+            role: "Owner",
+          },
+        }),
+      ]);
     } else {
       // Perform database update
       await prismaClient.roomUser.update({
         where: {
           roomId_userId: {
             roomId: room.id,
-            userId: userId
-          }
+            userId: userId,
+          },
         },
         data: {
-          role: role as any
-        }
+          role: role as any,
+        },
       });
     }
 
@@ -410,19 +452,22 @@ export const updateRole = async (req: Request, res: Response) => {
           type: "role_updated",
           roomId: slug,
           updates,
-        })
+        }),
       );
     } catch (redisError) {
       console.error("Failed to publish role update to Redis:", redisError);
     }
 
-    return res.status(200).json({ success: true, message: "Role updated successfully" });
-
+    return res
+      .status(200)
+      .json({ success: true, message: "Role updated successfully" });
   } catch (e) {
     console.log(`Error: ${e}`);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
-}
+};
 
 export const getRoomEvents = async (req: Request, res: Response) => {
   const { roomId } = req.params;
@@ -433,10 +478,10 @@ export const getRoomEvents = async (req: Request, res: Response) => {
       include: {
         roomUsers: {
           where: {
-            userId: req.userId
-          }
-        }
-      }
+            userId: req.userId,
+          },
+        },
+      },
     });
 
     if (!room) {
@@ -446,16 +491,16 @@ export const getRoomEvents = async (req: Request, res: Response) => {
 
     const events = await prismaClient.roomEvents.findMany({
       where: {
-        roomId: room.id
+        roomId: room.id,
       },
       orderBy: {
-        sequenceNumber: "asc"
-      }
+        sequenceNumber: "asc",
+      },
     });
 
     return res.status(200).json({
       success: true,
-      events
+      events,
     });
   } catch (e) {
     console.error("Failed to retrieve room events:", e);
@@ -469,16 +514,21 @@ export const removeUser = async (req: Request, res: Response) => {
   const myUserId = req.userId;
 
   if (userId === myUserId) {
-    return res.status(400).json({ success: false, message: "You cannot remove yourself from the room" });
+    return res.status(400).json({
+      success: false,
+      message: "You cannot remove yourself from the room",
+    });
   }
 
   try {
     const room = await prismaClient.room.findUnique({
-      where: { slug: Number(slug) }
+      where: { slug: Number(slug) },
     });
 
     if (!room) {
-      return res.status(404).json({ success: false, message: "Room not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Room not found" });
     }
 
     // Check if the requester is the Owner
@@ -486,13 +536,16 @@ export const removeUser = async (req: Request, res: Response) => {
       where: {
         roomId_userId: {
           roomId: room.id,
-          userId: myUserId as string
-        }
-      }
+          userId: myUserId as string,
+        },
+      },
     });
 
     if (!myRoomUser || myRoomUser.role !== "Owner") {
-      return res.status(403).json({ success: false, message: "Only the room owner can remove users" });
+      return res.status(403).json({
+        success: false,
+        message: "Only the room owner can remove users",
+      });
     }
 
     // Check if the target user is a member of the room
@@ -500,13 +553,15 @@ export const removeUser = async (req: Request, res: Response) => {
       where: {
         roomId_userId: {
           roomId: room.id,
-          userId: userId
-        }
-      }
+          userId: userId,
+        },
+      },
     });
 
     if (!targetRoomUser) {
-      return res.status(404).json({ success: false, message: "User is not a member of this room" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User is not a member of this room" });
     }
 
     // Delete the membership
@@ -514,9 +569,9 @@ export const removeUser = async (req: Request, res: Response) => {
       where: {
         roomId_userId: {
           roomId: room.id,
-          userId: userId
-        }
-      }
+          userId: userId,
+        },
+      },
     });
 
     // Publish to Redis channel so ws-backend can handle disconnection/cleanup
@@ -527,16 +582,20 @@ export const removeUser = async (req: Request, res: Response) => {
         JSON.stringify({
           type: "user_removed",
           roomId: slug,
-          userId: userId
-        })
+          userId: userId,
+        }),
       );
     } catch (redisError) {
       console.error("Failed to publish user removal to Redis:", redisError);
     }
 
-    return res.status(200).json({ success: true, message: "User removed successfully" });
+    return res
+      .status(200)
+      .json({ success: true, message: "User removed successfully" });
   } catch (e) {
     console.error("Failed to remove user:", e);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };

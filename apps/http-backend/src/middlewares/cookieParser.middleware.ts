@@ -1,9 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 
-export const cookieParser = (req: Request, res: Response, next: NextFunction) => {
+export const cookieParser = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   const cookieHeader = req.headers.cookie || "";
   const cookies: Record<string, string> = {};
-  
+
   if (cookieHeader) {
     cookieHeader.split(";").forEach((cookie) => {
       const parts = cookie.split("=");
@@ -13,7 +17,7 @@ export const cookieParser = (req: Request, res: Response, next: NextFunction) =>
       }
     });
   }
-  
+
   req.cookies = cookies;
   next();
 };

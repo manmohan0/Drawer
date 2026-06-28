@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -49,7 +49,7 @@ export default function Home() {
             Authorization: token || "",
           },
           withCredentials: true,
-        }
+        },
       );
 
       setSuccess("Room created successfully! Redirecting...");
@@ -60,7 +60,7 @@ export default function Home() {
       console.error(err);
       setError(
         err.response?.data?.message ||
-        "Failed to create room. The room code might already exist."
+          "Failed to create room. The room code might already exist.",
       );
     } finally {
       setLoading(false);
@@ -80,10 +80,14 @@ export default function Home() {
     }
 
     try {
-      const res = await axios.post(`${BACKEND_URL}/room/joinRoom`, { slug: Number(joinSlug) }, { withCredentials: true });
+      const res = await axios.post(
+        `${BACKEND_URL}/room/joinRoom`,
+        { slug: Number(joinSlug) },
+        { withCredentials: true },
+      );
 
       if (res && !res.data.success) {
-        router.push("/signin")
+        router.push("/signin");
         setLoading(false);
         return;
       }
@@ -98,7 +102,7 @@ export default function Home() {
       console.error(err);
       setError(
         err.response?.data?.message ||
-        "Room not found. Please verify the room code."
+          "Room not found. Please verify the room code.",
       );
     } finally {
       setLoading(false);
@@ -120,7 +124,8 @@ export default function Home() {
             </span>
           </h1>
           <p className="text-lg md:text-xl text-zinc-400 max-w-2xl">
-            A real-time collaborative whiteboard drawing application. Sketch, resize, pan, zoom, and work together seamlessly.
+            A real-time collaborative whiteboard drawing application. Sketch,
+            resize, pan, zoom, and work together seamlessly.
           </p>
         </div>
 
@@ -163,7 +168,9 @@ export default function Home() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               {/* Join Room */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-zinc-300">Join a Room</h3>
+                <h3 className="text-lg font-semibold text-zinc-300">
+                  Join a Room
+                </h3>
                 <form onSubmit={handleJoinRoom} className="space-y-3">
                   <input
                     type="text"
@@ -185,7 +192,9 @@ export default function Home() {
 
               {/* Create Room */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-zinc-300">Create Room</h3>
+                <h3 className="text-lg font-semibold text-zinc-300">
+                  Create Room
+                </h3>
                 <form onSubmit={handleCreateRoom} className="space-y-3">
                   <input
                     type="text"
