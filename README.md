@@ -1,12 +1,59 @@
-# 🎨 Drawer: Collaborative Vector Whiteboard with Gemini AI Shape Generation
+# 🎨 Drawer
 
-Welcome to **Drawer**, a state-of-the-art real-time collaborative vector whiteboard application. Drawer allows users to create workspaces (rooms) where multiple participants can sketch, resize, pan, zoom, upload images, write text, and chat in real-time. It features a complete historic timeline replay system and integrated Gemini AI shape generation.
+A real-time collaborative infinite whiteboard featuring event-sourced version history, AI-assisted drawing, and horizontally scalable WebSocket architecture.
+
+![Drawer Workspace Interface](apps/frontend/public/drawer_interface_preview.png)
 
 ---
 
-## 🏗️ Monorepo Architecture Overview
+## 🚀 Product Evolution & Narrative
 
-This project is configured as a monorepo managed by **Turborepo** with **pnpm workspaces**. The services are split into focused application layers and shared packages:
+**Drawer** represents the third milestone in a progression of real-time systems designed to solve increasingly complex synchronization and distributed-state challenges:
+
+1.  **Realtime Chat**: Solved real-time multi-room textual messaging.
+2.  **Poll Battle**: Solved real-time synchronized state voting and concurrent score aggregation.
+3.  **Drawer**: Solves real-time collaborative vector graphics rendering, infinite viewport transformations, and event-sourced version history.
+
+---
+
+## ⚡ Technical Highlights
+
+- **Infinite Canvas**: Viewport coordinates projected to coordinates space with support for infinite panning and dynamic zooming.
+- **Event Sourcing**: Immutable event history tracking instead of simple database snapshots, enabling full timeline replays and consistent undo/redo logic.
+- **Redis Pub/Sub Inter-Server Sync**: Syncs event payloads across multiple WebSocket nodes, allowing the system to scale horizontally.
+- **Bi-directional WebSockets**: Handshake-level and message-level JWT validation with strict timeouts.
+- **AI-Assisted Canvas**: Connects to the `gemini-3.5-flash` model to transform natural language prompts into vector shapes on the whiteboard.
+
+---
+
+## 🧰 Feature Breakdown
+
+### 🎨 Graphics Engine
+
+- **Infinite Whiteboard**: Viewport coordinate translations support infinite panning and zoom scales (0.5x to 5.0x).
+- **Vector Shape Toolkit**: Draw Rectangles, Circles, Lines, Text, and dynamic base64 Images (max 5MB with aspect-ratio locking).
+- **Vector Manipulations**: Selection outline highlights, drag-to-move, drag-to-scale, and rotation handles using computed vector angles.
+- **Copy & Paste**: Save selected vector elements to an in-memory clipboard (`clipboardShape`) and duplicate them dynamically relative to the cursor position.
+- **Layer Management**: Push shapes up or down the rendering hierarchy using Z-index layer swap routines.
+
+### 👥 Collaboration & Scaling
+
+- **Real-time Collaboration**: WebSocket events coordinate tool selections, colors, shape updates, and canvas deletions immediately.
+- **Horizontal Scalability**: WebSocket instances communicate through a **Redis Pub/Sub** message bus, allowing sessions to scale past a single server.
+- **Presence Tracking & Active Viewports**: Caches user coordinates in Redis, displaying active member cursors and viewport locations in real-time.
+- **Role-Based Access Control**: Strict client and server permissions for `Viewer`, `Editor`, and `Owner` roles.
+
+### 📜 Version History & AI
+
+- **Interactive Version History**: Replay the evolution of the board from the starting stroke. Pause, step forward, or step backward using adjustable speed playback controls.
+- **Deterministic Undo / Redo**: Revert or repeat vector alterations using a dual stack transaction engine. Reverting a deleted shape uses temporary transaction IDs to reconstruct the element.
+- **AI Vector Generation**: Send conversational instructions (e.g., _"draw a laptop next to a cup of coffee"_) to generate structured vector paths.
+
+---
+
+## 🏗️ Architecture & Monorepo Layout
+
+This project is configured as a monorepo managed by **Turborepo** with **pnpm workspaces**:
 
 ```mermaid
 graph TD
@@ -14,7 +61,7 @@ graph TD
     HTTP["🌐 Express API Backend (apps/http-backend)"]
     WS["⚡ WebSocket Server (apps/ws-backend)"]
     DB["🗄️ PostgreSQL Database"]
-    Redis["🔴 Redis Message Bus & Cache"]
+    Redis["🔴 Redis Pub/Sub & Cache"]
     Gemini["✨ Gemini 3.5 Flash Model"]
 
     Client -->|REST Requests| HTTP
@@ -25,171 +72,106 @@ graph TD
     HTTP <-->|Generate Shapes Request| Gemini
 ```
 
-### Monorepo Layout
+### Monorepo Structure
 
 - **Applications (`apps/`)**:
-  - [`apps/frontend`](file:///d:/Drawer/apps/frontend): A Next.js 16 Web application using Tailwind CSS 4, HTML5 Canvas API, and WebSockets.
-  - [`apps/http-backend`](file:///d:/Drawer/apps/http-backend): An Express server managing REST API endpoints, JWT authentication, room operations, and Gemini AI.
-  - [`apps/ws-backend`](file:///d:/Drawer/apps/ws-backend): A high-performance WebSocket server orchestrating real-time Canvas updates, presence state, and viewport caching via Redis.
+  - [`apps/frontend`](file:///d:/Drawer/apps/frontend): A Next.js 16 app using Tailwind CSS 4, HTML5 Canvas API, and WebSockets.
+  - [`apps/http-backend`](file:///d:/Drawer/apps/http-backend): An Express server managing REST API endpoints, JWT auth, room configs, and Gemini AI.
+  - [`apps/ws-backend`](file:///d:/Drawer/apps/ws-backend): A WebSocket server coordinating real-time canvas events, active cursors, and viewport tracking.
 - **Shared Packages (`packages/`)**:
   - [`packages/common`](file:///d:/Drawer/packages/common): Shared Zod validation schemas and general types/enums.
-  - [`packages/db`](file:///d:/Drawer/packages/db): Shared Prisma database Client mapping the database schemas.
+  - [`packages/db`](file:///d:/Drawer/packages/db): Shared Prisma client and migrations for PostgreSQL.
   - [`packages/backend-common`](file:///d:/Drawer/packages/backend-common): Configuration modules shared across the backend instances.
   - [`packages/ui`](file:///d:/Drawer/packages/ui): Shared React components.
-  - [`packages/eslint-config`](file:///d:/Drawer/packages/eslint-config) & [`packages/typescript-config`](file:///d:/Drawer/packages/typescript-config): ESLint rules and TypeScript configuration baselines.
+  - [`packages/eslint-config`](file:///d:/Drawer/packages/eslint-config) & [`packages/typescript-config`](file:///d:/Drawer/packages/typescript-config): Build configuration baselines.
 
 ---
 
-## 🚀 Core Product Features
+## 📐 Infinite Canvas & Coordinate Transformations
 
-1.  **High-Performance Canvas Engine**: Coordinates zoom (0.5x to 5.0x) and infinite viewport panning. Handles coordinates translation math between the browser screen space and game world coordinates.
-2.  **Rich Vector Tools**: Drawing support for Rectangles, Circles, Lines, Text, and dynamic image insertion (with 5MB file limit checks and aspect ratio retention).
-3.  **Advanced Vector Manipulations**: Real-time bounding selector boxes allow users to select, reposition, scale, and rotate vector shapes using customized rotational drag vectors.
-4.  **Real-Time State Synchronization**: Collaborative state updates synced across clients via Redis Pub/Sub backend channels and WebSockets. Active viewport sharing lets editors see where other members are looking.
-5.  **History Subsystem (Undo/Redo)**: Full transaction logging allowing actions to be reverted. Reverting deletions generates a temporary server transaction to restore elements reliably.
-6.  **Interactive Timeline Replay Mode**: Sequenced database storage of events allows room owners and editors to replay the drawing's history at variable playback speeds (Play, Pause, and Frame-by-Frame steps).
-7.  **Gemini AI Assisted Drawing**: Connects to the `gemini-3.5-flash` model. Accepts natural language requests (e.g., _"draw a house with a tree beside it"_) and converts them to vector shapes on the canvas.
-8.  **Role-Based Access Control**: Standardizes users into `Viewer`, `Editor`, and `Owner` roles.
+To keep canvas rendering sharp and accurate across different device ratios, Drawer distinguishes between **screen viewport coordinates** and **canvas world coordinates**.
 
----
+All shapes are stored in the database in **canvas world coordinates** (which are zoom-independent and pan-independent). During rendering or user interaction, coordinates are projected dynamically.
 
-## 🧮 Mathematical Subsystem: Viewport Coordinate Transforms
+### Viewport Projection Equations
 
-To keep canvas rendering sharp and accurate across different device ratios, screen coordinates ($S_x$, $S_y$) are dynamically translated into game-world coordinates ($W_x$, $W_y$) using the zoom factor ($Z$) and viewport pan offsets ($P_x$, $P_y$).
-
-### 1. Plain Text Equations (Standard Markdown Compatibility)
-
-**World to Screen Coordinates (For Rendering Shapes):**
+**World Coordinates to Screen Coordinates (For Rendering Shapes):**
 
 ```text
 Screen_X = (World_X * Zoom) + Pan_X
 Screen_Y = (World_Y * Zoom) + Pan_Y
 ```
 
-**Screen to World Coordinates (For Normalizing Browser Mouse Events):**
+**Screen Coordinates to World Coordinates (For Normalizing Browser Mouse Events):**
 
 ```text
 World_X = (Screen_X - Pan_X) / Zoom
 World_Y = (Screen_Y - Pan_Y) / Zoom
 ```
 
-### 2. LaTeX Mathematical Representation
-
-For Markdown engines that support LaTeX math block rendering:
-
-$$
-S_x = W_x \cdot Z + P_x
-$$
-
-$$
-S_y = W_y \cdot Z + P_y
-$$
-
-$$
-W_x = \frac{S_x - P_x}{Z}
-$$
-
-$$
-W_y = \frac{S_y - P_y}{Z}
-$$
-
 Where:
 
-- **$S_x$, $S_y$**: Screen viewport coordinates
-- **$W_x$, $W_y$**: Game-world coordinates
-- **$Z$**: Current zoom level factor
-- **$P_x$, $P_y$**: Horizontal and vertical pan offsets
+- **Screen_X, Screen_Y**: Screen viewport coordinates (Sx, Sy)
+- **World_X, World_Y**: Canvas world coordinates (Wx, Wy)
+- **Zoom**: Current zoom level factor (Z), ranging from 0.5 to 5.0
+- **Pan_X, Pan_Y**: Horizontal and vertical pan offsets (Px, Py)
 
 _Reference implementation can be reviewed in_ [`apps/frontend/Draw/Game.ts`](file:///d:/Drawer/apps/frontend/Draw/Game.ts).
 
 ---
 
+## 📜 Event Sourcing Architecture
+
+Drawer uses an event-sourcing pattern for synchronization and version control. Rather than saving absolute states or snapshots of the whiteboard, the database stores the complete, immutable stream of events inside the `roomEvents` model.
+
+```
+[Create Rectangle] ➔ [Move Rectangle] ➔ [Rotate Rectangle] ➔ [Delete Rectangle]
+```
+
+### Why Event Sourcing?
+
+1.  **Version History Replay**: The frontend can compute the whiteboard's appearance at any point in history by starting with an empty canvas and running the event stream up to index N.
+2.  **Robust Undo / Redo**: Instead of overriding shapes, undo/redo logs actions (e.g., reverting a `MOVE_SHAPE` pushes a mirror move event).
+3.  **Low Network Payload**: Real-time collaborative updates only need to broadcast the delta mutation (`MOVE_SHAPE` coordinates) instead of the entire shape registry.
+
+---
+
+## 🛠️ Engineering Challenges & Solutions
+
+- **Implementing Rotation Handles**: Resizing a rotated shape requires calculating the pointer coordinates relative to the shape's pivot point. This was solved by applying coordinate rotation transforms using trigonometry (x' = x _ cos(theta) - y _ sin(theta)) before computing dimension deltas.
+- **Designing an Immutable Event Ledger**: Storing shape modifications without database updates led to sequence conflicts. Implemented a sequence manager inside [`apps/ws-backend`](file:///d:/Drawer/apps/ws-backend/src/index.ts) to resolve conflicts and write database events in order.
+- **Horizontal WebSocket Scalability**: Storing WebSocket user mappings on a single node prevents scaling. Implemented a **Redis Pub/Sub** message layer to sync shape updates instantly across nodes.
+- **Optimizing Rendering Loops**: Redrawing hundreds of shapes on every frame during active zoom/pan can lag. Implemented selective caching, and off-screen canvas rendering.
+
+---
+
 ## 💾 Database Schema
 
-The PostgreSQL schema is managed via Prisma in [`packages/db/prisma/schema.prisma`](file:///d:/Drawer/packages/db/prisma/schema.prisma). It maps the following relationships:
+The database models are configured inside [`packages/db/prisma/schema.prisma`](file:///d:/Drawer/packages/db/prisma/schema.prisma):
 
-| Model            | Description                                                                            | Relations                                                            |
-| :--------------- | :------------------------------------------------------------------------------------- | :------------------------------------------------------------------- |
-| **`User`**       | Stores basic user accounts, credentials, and references.                               | Has many `chats`, `createdShapes`, `updatedShapes`, and `roomUsers`. |
-| **`Room`**       | Identifies collaborative canvas spaces mapped by numeric slugs.                        | Has many `chats`, `Shapes`, `roomUsers`, and `roomEvents`.           |
-| **`roomUser`**   | Bridges users to rooms, defining permissions via `role` (`Viewer`, `Editor`, `Owner`). | Many-to-many lookup table.                                           |
-| **`Chat`**       | Stores contextual group conversations within rooms.                                    | Belongs to `Room` and `User`.                                        |
-| **`Shapes`**     | Stores stringified vector shape payload objects currently on canvas.                   | Belongs to `Room`. Tracked by creators and updater IDs.              |
-| **`roomEvents`** | The event log database for replay mode. Tracks sequence actions.                       | Linked to `Room` and `User`.                                         |
-
----
-
-## ⚡ WebSocket Synchronized Protocols
-
-Clients establish communication with [`apps/ws-backend`](file:///d:/Drawer/apps/ws-backend/src/index.ts) using the following WebSocket interface structure.
-
-### 🔑 Authentication Flow
-
-If an `Authorization` token cookie is present during handshake, the connection is instantly authenticated. Otherwise, clients must send an `auth` frame within 5 seconds, or the connection is terminated:
-
-```json
-{
-  "type": "auth",
-  "token": "YOUR_JWT_AUTH_TOKEN"
-}
-```
-
-### 🎨 Synchronization Frames (`EventType`)
-
-All vector actions use payloads matching the shared [`packages/common/src/enum.ts`](file:///d:/Drawer/packages/common/src/enum.ts):
-
-- **`CREATE_SHAPE`**: Broadcasts a new vector shape creation.
-- **`DELETE_SHAPE`**: Reverts or deletes a shape by ID.
-- **`MOVE_SHAPE`**: Triggered when moving selected items.
-- **`ROTATE_SHAPE` / `SCALE_SHAPE`**: Syncs size, handle scaling, or angle changes.
-- **`CHANGE_FILL` / `CHANGE_STROKE`**: Syncs colors.
-- **`CHANGE_LAYER`**: Recalculates index hierarchies (`zIndex` swaps).
-- **`CHANGE_TEXT`**: Syncs text updates.
-- **`ADD_IMAGE`**: Dispatches base64 image urls.
+| Model            | Description                                                                      | Relations                                                            |
+| :--------------- | :------------------------------------------------------------------------------- | :------------------------------------------------------------------- |
+| **`User`**       | Handles user authentication and metadata.                                        | Links to `chats`, `createdShapes`, `updatedShapes`, and `roomUsers`. |
+| **`Room`**       | Identifies collaborative workspaces mapped by numeric slugs.                     | Contains `chats`, `Shapes`, `roomUsers`, and `roomEvents`.           |
+| **`roomUser`**   | Bridges users to rooms, defining role permissions (`Viewer`, `Editor`, `Owner`). | Many-to-many lookup table.                                           |
+| **`Chat`**       | Stores real-time room chat logs.                                                 | Belongs to `Room` and `User`.                                        |
+| **`Shapes`**     | Stores stringified shape payloads on the canvas.                                 | Belongs to `Room`.                                                   |
+| **`roomEvents`** | The immutable log that powers the timeline replay engine.                        | Linked to `Room` and `User`.                                         |
 
 ---
 
-## 🛠️ Environment Configuration
+## ⚡ WebSocket Event Reference
 
-Set up these `.env` configuration files inside their respective modules before launching the workspace:
+Clients communicate with the WebSocket backend via JSON frames. All coordinate mutations use event designations from [`packages/common/src/enum.ts`](file:///d:/Drawer/packages/common/src/enum.ts):
 
-### 🖥️ Next.js Web App Configuration
-
-Create [`apps/frontend/.env`](file:///d:/Drawer/apps/frontend/.env.example):
-
-```env
-NEXT_PUBLIC_BACKEND_URL=http://localhost:3010
-NEXT_PUBLIC_WS_URL=ws://localhost:8200
-```
-
-### 🌐 Express Backend API Configuration
-
-Create [`apps/http-backend/.env`](file:///d:/Drawer/apps/http-backend/.env.example):
-
-```env
-DATABASE_URL=postgresql://username:password@localhost:5432/drawer_db?schema=public
-PORT=3010
-FRONTEND_URL=http://localhost:3000
-GEMINI_API_KEY=your_gemini_api_key_here
-```
-
-### ⚡ WebSocket Server Configuration
-
-Create [`apps/ws-backend/.env`](file:///d:/Drawer/apps/ws-backend/.env.example):
-
-```env
-DATABASE_URL=postgresql://username:password@localhost:5432/drawer_db?schema=public
-PORT=8200
-REDIS_URL=redis://localhost:6379
-```
-
-### 🔐 Shared Backend Configuration
-
-Create [`packages/backend-common/.env`](file:///d:/Drawer/packages/backend-common/.env.example):
-
-```env
-JWT_SECRET=your_jwt_secret_key_here
-```
+- **`CREATE_SHAPE`**: Broadcasts a new shape.
+- **`DELETE_SHAPE`**: Removes a shape from the active layer.
+- **`MOVE_SHAPE`**: Updates translation offsets.
+- **`ROTATE_SHAPE` / `SCALE_SHAPE`**: Syncs shape orientation angles and bounding box dimensions.
+- **`CHANGE_FILL` / `CHANGE_STROKE`**: Syncs color changes.
+- **`CHANGE_LAYER`**: Swaps Z-index parameters of overlapping objects.
+- **`CHANGE_TEXT`**: Syncs text changes.
+- **`ADD_IMAGE`**: Dispatches base64 image strings.
 
 ---
 
@@ -205,55 +187,57 @@ Install all dependencies across workspaces:
 pnpm install
 ```
 
-### 2. Configure Database & Apply Migrations
+### 2. Set Up Environment Variables
 
-Make sure you have a running PostgreSQL database. Apply the Prisma migrations:
+Configure the `.env` parameters inside the respective applications:
+
+- **Next.js Frontend**: [`apps/frontend/.env`](file:///d:/Drawer/apps/frontend/.env.example)
+  ```env
+  NEXT_PUBLIC_BACKEND_URL=http://localhost:3010
+  NEXT_PUBLIC_WS_URL=ws://localhost:8200
+  ```
+- **Express API**: [`apps/http-backend/.env`](file:///d:/Drawer/apps/http-backend/.env.example)
+  ```env
+  DATABASE_URL=postgresql://username:password@localhost:5432/drawer_db?schema=public
+  PORT=3010
+  FRONTEND_URL=http://localhost:3000
+  GEMINI_API_KEY=your_gemini_api_key_here
+  ```
+- **WebSocket Backend**: [`apps/ws-backend/.env`](file:///d:/Drawer/apps/ws-backend/.env.example)
+  ```env
+  DATABASE_URL=postgresql://username:password@localhost:5432/drawer_db?schema=public
+  PORT=8200
+  REDIS_URL=redis://localhost:6379
+  ```
+- **Shared Common Backend**: [`packages/backend-common/.env`](file:///d:/Drawer/packages/backend-common/.env.example)
+  ```env
+  JWT_SECRET=your_jwt_secret_key_here
+  ```
+
+### 3. Generate Prisma Clients & Database Migrations
+
+Apply the PostgreSQL schemas:
 
 ```bash
-# Generate the Prisma client and sync schema with your PostgreSQL database
 pnpm --filter @repo/db build
 npx prisma migrate dev --schema=packages/db/prisma/schema.prisma
 ```
 
-### 3. Launch Development Servers
-
-Run the full monorepo stack:
+### 4. Run Development Workspace
 
 ```bash
 pnpm dev
 ```
 
-This runs:
+This boots up:
 
-- Frontend: [http://localhost:3000](http://localhost:3000)
-- Express API: [http://localhost:3010](http://localhost:3010)
-- WebSocket Server: [ws://localhost:8200](ws://localhost:8200)
+- Next.js App: [http://localhost:3000](http://localhost:3000)
+- Express Server: [http://localhost:3010](http://localhost:3010)
+- WS Server: [ws://localhost:8200](ws://localhost:8200)
 
 > [!TIP]
-> If you only want to spin up the backend instances (Express API & WebSockets) without running Next.js, run:
+> To run only the backend services (Express and WebSocket instances) without launching Next.js, run:
 >
 > ```bash
 > pnpm dev:backend
 > ```
-
-### 4. Build for Production
-
-Create optimized builds:
-
-```bash
-pnpm build
-```
-
----
-
-## 📂 Primary Code Reference Map
-
-Explore these core entrypoints to inspect implementation details:
-
-- **Whiteboard Canvas Controller**: [`apps/frontend/Draw/Game.ts`](file:///d:/Drawer/apps/frontend/Draw/Game.ts)
-- **Drawing Component Interface**: [`apps/frontend/components/Canvas.tsx`](file:///d:/Drawer/apps/frontend/components/Canvas.tsx)
-- **Vector Object Typings**: [`apps/frontend/types.ts`](file:///d:/Drawer/apps/frontend/types.ts)
-- **Sign-In / Sign-Up Zod Validation**: [`packages/common/src/types.ts`](file:///d:/Drawer/packages/common/src/types.ts)
-- **HTTP Endpoints Router**: [`apps/http-backend/src/routes/room.route.ts`](file:///d:/Drawer/apps/http-backend/src/routes/room.route.ts)
-- **AI Generation Controller**: [`apps/http-backend/src/controllers/ai.controller.ts`](file:///d:/Drawer/apps/http-backend/src/controllers/ai.controller.ts)
-- **WebSocket Handler Core**: [`apps/ws-backend/src/index.ts`](file:///d:/Drawer/apps/ws-backend/src/index.ts)
